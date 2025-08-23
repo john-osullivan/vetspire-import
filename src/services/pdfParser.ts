@@ -2,33 +2,48 @@ import { ClientPatientRecord, EMPTY_CLIENT } from '../types/clientTypes.js';
 
 export function parseClientPatientRecords(pdfText: string): ClientPatientRecord[] {
   const records: ClientPatientRecord[] = [];
+  const lines = pdfText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   
-  // Split by double newlines to separate records
-  const blocks = pdfText.split('\n\n').filter(block => block.trim().length > 0);
+  let currentRecord: ClientPatientRecord | null = null;
+  let i = 0;
   
-  for (const block of blocks) {
-    const lines = block.trim().split('\n').filter(line => line.trim().length > 0);
+  while (i < lines.length) {
+    const line = lines[i];
     
-    // Initialize record with all fields as null
-    const record: ClientPatientRecord = { ...EMPTY_CLIENT };
-    
-    // Parse each line as key-value pairs
-    for (let i = 0; i < lines.length; i += 2) {
-      const key = lines[i]?.trim();
-      const value = lines[i + 1]?.trim();
+    // Check if this line is a key (next line should be the value)
+    if (i + 1 < lines.length) {
+      const key = line;
+      const value = lines[i + 1];
       
-      if (key && value !== undefined) {
-        // Check if key exists in our interface
-        if (Object.keys(EMPTY_CLIENT).includes(key)) {
-          (record as any)[key] = value;
+      // If we encounter a patientId key, start a new record
+      if (key === 'patientId') {
+        // Save previous record if it exists and has required fields
+        if (currentRecord && currentRecord.patientId && currentRecord.patientName) {
+          records.push(currentRecord);
         }
+        
+        // Start new record
+        currentRecord = { ...EMPTY_CLIENT };
+        currentRecord.patientId = value;
+        i += 2; // Skip both key and value lines
+        continue;
+      }
+      
+      // If we have a current record and this is a valid key, add the field
+      if (currentRecord && Object.keys(EMPTY_CLIENT).includes(key)) {
+        (currentRecord as any)[key] = value;
+        i += 2; // Skip both key and value lines
+        continue;
       }
     }
     
-    // Only add record if it has core identifying fields
-    if (record.patientId && record.clientId && record.patientName && record.clientFirstName) {
-      records.push(record);
-    }
+    // If we get here, skip this line (might be whitespace or unexpected content)
+    i++;
+  }
+  
+  // Don't forget to add the last record
+  if (currentRecord && currentRecord.patientId && currentRecord.patientName) {
+    records.push(currentRecord);
   }
   
   return records;
