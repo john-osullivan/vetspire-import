@@ -2,6 +2,8 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { extractTextFromPdf } from '../clients/pdfClient.js';
+import { parseClientPatientRecords } from '../services/pdfParser.js';
+import { writeRecordsToCSV } from '../services/csvWriter.js';
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
@@ -29,12 +31,13 @@ async function main() {
     console.log(`Extracting text from: ${argv['pdf-file']}`);
     const text = await extractTextFromPdf(argv['pdf-file'] as string);
     
-    // For now, just output first 1000 characters to examine structure
-    console.log('First 1000 characters:');
-    console.log(text.substring(0, 1000));
-    console.log('\n...\n');
-    console.log('Last 1000 characters:');
-    console.log(text.substring(text.length - 1000));
+    console.log('Parsing client-patient records...');
+    const records = parseClientPatientRecords(text);
+    
+    console.log(`Found ${records.length} client-patient records`);
+    
+    const csvPath = writeRecordsToCSV(records, argv.output as string);
+    console.log(`CSV written to: ${csvPath}`);
     
   } catch (error) {
     console.error('Error processing PDF:', error);
