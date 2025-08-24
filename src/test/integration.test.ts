@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import fs from 'fs';
 import { parseClientPatientRecords } from '../services/pdfParser.js';
-import { writeRecordsToCSV } from '../services/csvWriter.js';
+import { writeRecordsToCSV } from '../services/csvHandler.js';
 import { extractTextFromPdf } from '../clients/pdfClient.js';
 
 describe('PDF to CSV Integration', async () => {

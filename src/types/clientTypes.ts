@@ -1,4 +1,4 @@
-export interface ClientPatientRecord {
+export interface ClientImportRow {
   patientId: string | null;
   patientName: string | null;
   patientSpecies: string | null;
@@ -19,7 +19,7 @@ export interface ClientPatientRecord {
   patientStatus: string | null;
 }
 
-export const EMPTY_CLIENT: ClientPatientRecord = {
+export const EMPTY_CLIENT: ClientImportRow = {
   patientId: null,
   patientName: null,
   patientSpecies: null,
@@ -39,3 +39,12 @@ export const EMPTY_CLIENT: ClientPatientRecord = {
   clientState: null,
   patientStatus: null
 };
+
+export function isClientImportRow(row: any): row is ClientImportRow {
+  const requiredFields = Object.keys(EMPTY_CLIENT);
+  return (
+    typeof row === 'object' &&
+    row !== null &&
+    requiredFields.every(field => field in row)
+  );
+}

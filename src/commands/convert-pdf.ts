@@ -3,7 +3,7 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { extractTextFromPdf } from '../clients/pdfClient.js';
 import { parseClientPatientRecords } from '../services/pdfParser.js';
-import { writeRecordsToCSV } from '../services/csvWriter.js';
+import { writeRecordsToCSV } from '../services/csvHandler.js';
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))

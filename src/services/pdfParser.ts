@@ -1,10 +1,10 @@
-import { ClientPatientRecord, EMPTY_CLIENT } from '../types/clientTypes.js';
+import { ClientImportRow, EMPTY_CLIENT } from '../types/clientTypes.js';
 
-export function parseClientPatientRecords(pdfText: string): ClientPatientRecord[] {
-  const records: ClientPatientRecord[] = [];
+export function parseClientPatientRecords(pdfText: string): ClientImportRow[] {
+  const records: ClientImportRow[] = [];
   const lines = pdfText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   
-  let currentRecord: ClientPatientRecord | null = null;
+  let currentRecord: ClientImportRow | null = null;
   let i = 0;
   
   while (i < lines.length) {

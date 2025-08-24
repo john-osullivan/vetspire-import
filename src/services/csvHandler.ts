@@ -1,8 +1,9 @@
-import fs from 'fs';
+import fs, { readFileSync, writeFileSync} from 'fs';
 import path from 'path';
-import { ClientPatientRecord, EMPTY_CLIENT } from '../types/clientTypes.js';
+import { parse } from 'csv-parse/sync';
+import { ClientImportRow, EMPTY_CLIENT, isClientImportRow } from '../types/clientTypes.js';
 
-export function writeRecordsToCSV(records: ClientPatientRecord[], outputDir: string): string {
+export function writeRecordsToCSV(records: ClientImportRow[], outputDir: string): string {
   // Create timestamp for filename
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `client-patient-records_${timestamp}.csv`;
@@ -38,4 +39,23 @@ export function writeRecordsToCSV(records: ClientPatientRecord[], outputDir: str
   fs.writeFileSync(filePath, csvLines.join('\n'));
   
   return filePath;
+}
+
+
+export function readCsvFile(inputDir: string): ClientImportRow[] {
+  const csvContent = readFileSync(inputDir, 'utf-8');
+  const records = parse(csvContent, { columns: true, skip_empty_lines: true });
+  
+  const validRows: ClientImportRow[] = [];
+  
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    if (isClientImportRow(record)) {
+      validRows.push(record);
+    } else {
+      throw new Error(`Invalid CSV row at index ${i}: ${JSON.stringify(record)}`);
+    }
+  }
+  
+  return validRows;
 }
