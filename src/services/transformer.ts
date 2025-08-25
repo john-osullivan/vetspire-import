@@ -48,19 +48,19 @@ export function parseDate(dateStr: string | null): string | undefined {
  */
 export function parseSexAndNeutered(patientSexSpay: string | null): { sex: Sex; neutered: boolean } {
     // Sex/spay lookup - covers MI, MN, FI, FS from the data
-    const SEX_SPAY_LOOKUP = {
-        'MI': { sex: 'M' as Sex, neutered: false }, // Male Intact (155 records)
-        'MN': { sex: 'M' as Sex, neutered: true },  // Male Neutered (1050 records)  
-        'FI': { sex: 'F' as Sex, neutered: false }, // Female Intact (138 records)
-        'FS': { sex: 'F' as Sex, neutered: true },  // Female Spayed (1018 records)
+    const SEX_SPAY_LOOKUP: Record<string, { sex: Sex, neutered: boolean }> = {
+        'MI': { sex: 'MALE', neutered: false }, // Male Intact (155 records)
+        'MN': { sex: 'MALE', neutered: true },  // Male Neutered (1050 records)  
+        'FI': { sex: 'FEMALE', neutered: false }, // Female Intact (138 records)
+        'FS': { sex: 'FEMALE', neutered: true },  // Female Spayed (1018 records)
     } as const;
 
     if (!hasValue(patientSexSpay)) {
-        return { sex: 'M', neutered: false };
+        return { sex: 'UNKNOWN', neutered: false };
     }
 
     const code = patientSexSpay!.trim().toUpperCase();
-    return SEX_SPAY_LOOKUP[code as keyof typeof SEX_SPAY_LOOKUP] || { sex: 'M', neutered: false };
+    return SEX_SPAY_LOOKUP[code as keyof typeof SEX_SPAY_LOOKUP] || { sex: 'UNKNOWN', neutered: false };
 }
 
 /**
@@ -173,12 +173,18 @@ export function transformToPatientInput(row: ClientImportRow): PatientInput {
     const birthDate = parseDate(row.patientDOB);
     const isDeceased = isPatientDeceased(row.patientStatus);
 
+    // Map internal sex values to Vetspire GraphQL enum values
+    let sexEnum: 'MALE' | 'FEMALE' | 'UNKNOWN';
+    if (sex === 'MALE') sexEnum = 'MALE';
+    else if (sex === 'FEMALE') sexEnum = 'FEMALE';
+    else sexEnum = 'UNKNOWN';
+
     return {
         name: patient.name || '',
         species: patient.species || '',
         breed: patient.breed || '',
         color: patient.color,
-        sex,
+        sex: sexEnum,
         neutered,
         goalWeight,
         birthDate,

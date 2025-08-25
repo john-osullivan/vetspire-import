@@ -6,17 +6,11 @@ import { processAll } from '../services/importer.js';
 
 async function main() {
     const argv = await yargs(hideBin(process.argv))
-        .command(
-            '$0 <csv-file>',
-            'Import CSV records to Vetspire API',
-            (yargs) => {
-                return yargs.positional('csv-file', {
-                    describe: 'Path to the CSV file to import',
-                    type: 'string',
-                    demandOption: true
-                });
-            }
-        )
+        .positional('csv-file', {
+            describe: 'Path to the CSV file to import',
+            type: 'string',
+            demandOption: true
+        })
         .option('full-send', {
             alias: 'f',
             type: 'boolean',
@@ -35,18 +29,22 @@ async function main() {
             description: 'Limit number of records to process (for testing)',
             default: undefined
         })
+        .strict(false)
+        .parserConfiguration({ 'populate--': true })
         .help()
         .example('$0 data.csv', 'Dry run import from data.csv (test location)')
-        .example('$0 data.csv --full-send', 'Actually import data from data.csv (test location)')
-        .example('$0 data.csv --uptown', 'Dry run to Uptown Vets (real location)')
-        .example('$0 data.csv --full-send --uptown', 'Actually import to Uptown Vets')
-        .example('$0 data.csv --limit 10', 'Dry run first 10 records only')
+        .example('$0 --full-send =ata.csv', 'Actually import data from data.csv (test location)')
+        .example('$0 --uptown data.csv', 'Dry run to Uptown Vets (real location)')
+        .example('$0 --full-send --uptown data.csv', 'Actually import to Uptown Vets')
+        .example('$0 --limit 10 data.csv', 'Dry run first 10 records only')
+        .example('$0 data.csv --limit 10', 'Options can be placed before or after the CSV file')
         .argv;
 
     try {
-        console.log(`Reading CSV file: ${argv['csv-file']}`);
-        const records = readCsvFile(argv['csv-file'] as string);
-
+        const csvFile = argv['csv-file'] || argv._[0] as string;
+        console.log(`Reading CSV file: ${csvFile}`);
+        console.log('argv: ', JSON.stringify(argv, null, 2));
+        const records = readCsvFile(csvFile);
         console.log(`Found ${records.length} client-patient records`);
 
         // Limit records if specified

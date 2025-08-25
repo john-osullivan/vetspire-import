@@ -7,7 +7,7 @@ export type DateTime = string;
 export type NaiveDateTime = string;
 export type Decimal = number;
 
-export type Sex = 'M' | 'F';
+export type Sex = 'MALE' | 'FEMALE' | 'UNKNOWN';
 export type Pronouns = 'he/him' | 'she/her' | 'they/them' | 'other';
 export type DiscountType = 'percentage' | 'fixed';
 
