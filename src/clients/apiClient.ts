@@ -387,10 +387,6 @@ export async function fetchAllExistingRecords(sendApiRequests: boolean = false) 
   );
   if (!Array.isArray(allPatients)) allPatients = [];
 
-  // Defensive logging
-  console.log('DEBUG allClients:', allClients, 'type:', typeof allClients, 'isArray:', Array.isArray(allClients));
-  console.log('DEBUG allPatients:', allPatients, 'type:', typeof allPatients, 'isArray:', Array.isArray(allPatients));
-
   if (!Array.isArray(allClients)) allClients = [];
   if (!Array.isArray(allPatients)) allPatients = [];
 
