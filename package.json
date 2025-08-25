@@ -7,7 +7,11 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "convert-pdf": "tsx src/commands/convert-pdf.ts"
+    "convert-pdf": "tsx src/commands/convert-pdf.ts",
+    "import-csv": "tsx src/commands/import-csv.ts",
+    "rollback-import": "tsx src/commands/rollback-import.ts",
+    "sync-commands": "node scripts/sync-commands.js",
+    "postinstall": "npm run sync-commands"
   },
   "author": "",
   "license": "ISC",
