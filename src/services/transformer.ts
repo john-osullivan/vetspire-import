@@ -14,7 +14,7 @@ export function parseSexAndNeutered(patientSexSpay: string | null): { sex: strin
   const neuteredChar = patientSexSpay.charAt(1).toUpperCase();
 
   const sex = sexChar === 'M' ? 'Male' : sexChar === 'F' ? 'Female' : 'Unknown';
-  const neutered = neuteredChar === 'S'; // S = Spayed/Neutered, I = Intact
+  const neutered = neuteredChar === 'S' || neuteredChar === 'N'; // S = Spayed/Neutered, N = Neutered, I = Intact
 
   return { sex, neutered };
 }
@@ -30,7 +30,18 @@ export function isPatientDeceased(patientStatus: string | null): boolean {
   }
   
   const status = patientStatus.trim();
-  return status === 'Deceased' || status === 'N/A - D';
+  return status === 'Deceased' || status === 'N/A - D' || status === 'D';
+}
+
+/**
+ * Transform ClientImportRow data into both ClientInput and PatientInput formats for the Vetspire API
+ * Returns an object with both client and patient data ready for API submission
+ */
+export function transformInputRow(row: ClientImportRow): { client: ClientInput; patient: PatientInput } {
+  const client = transformToClientInput(row);
+  const patient = transformToPatientInput(row);
+  
+  return { client, patient };
 }
 
 /**

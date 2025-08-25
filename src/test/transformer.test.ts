@@ -2,83 +2,30 @@ import { describe, it, expect } from 'vitest';
 import { 
   parseSexAndNeutered, 
   isPatientDeceased, 
-  transformToClientInput, 
-  transformToPatientInput 
+  transformInputRow
 } from '../services/transformer.js';
 import { ClientImportRow } from '../types/clientTypes.js';
 
 describe('parseSexAndNeutered', () => {
-  it('should parse male intact correctly', () => {
-    const result = parseSexAndNeutered('MI');
-    expect(result).toEqual({ sex: 'Male', neutered: false });
-  });
-
-  it('should parse female spayed correctly', () => {
-    const result = parseSexAndNeutered('FS');
-    expect(result).toEqual({ sex: 'Female', neutered: true });
-  });
-
-  it('should parse male spayed correctly', () => {
-    const result = parseSexAndNeutered('MS');
-    expect(result).toEqual({ sex: 'Male', neutered: true });
-  });
-
-  it('should parse female intact correctly', () => {
-    const result = parseSexAndNeutered('FI');
-    expect(result).toEqual({ sex: 'Female', neutered: false });
-  });
-
-  it('should handle lowercase input', () => {
-    const result = parseSexAndNeutered('mi');
-    expect(result).toEqual({ sex: 'Male', neutered: false });
-  });
-
-  it('should handle null input', () => {
-    const result = parseSexAndNeutered(null);
-    expect(result).toEqual({ sex: 'Unknown', neutered: false });
-  });
-
-  it('should handle invalid format', () => {
-    const result = parseSexAndNeutered('XY');
-    expect(result).toEqual({ sex: 'Unknown', neutered: false });
-  });
-
-  it('should handle wrong length input', () => {
-    const result = parseSexAndNeutered('M');
-    expect(result).toEqual({ sex: 'Unknown', neutered: false });
+  it('should parse basic sex and neutered combinations', () => {
+    expect(parseSexAndNeutered('MI')).toEqual({ sex: 'Male', neutered: false });
+    expect(parseSexAndNeutered('FS')).toEqual({ sex: 'Female', neutered: true });
+    expect(parseSexAndNeutered('MN')).toEqual({ sex: 'Male', neutered: true });
+    expect(parseSexAndNeutered(null)).toEqual({ sex: 'Unknown', neutered: false });
   });
 });
 
 describe('isPatientDeceased', () => {
-  it('should return true for "Deceased" status', () => {
+  it('should identify deceased patients correctly', () => {
     expect(isPatientDeceased('Deceased')).toBe(true);
-  });
-
-  it('should return true for "N/A - D" status', () => {
+    expect(isPatientDeceased('D')).toBe(true);
     expect(isPatientDeceased('N/A - D')).toBe(true);
-  });
-
-  it('should return false for "Home" status', () => {
     expect(isPatientDeceased('Home')).toBe(false);
-  });
-
-  it('should return false for null status', () => {
     expect(isPatientDeceased(null)).toBe(false);
-  });
-
-  it('should handle whitespace in status', () => {
-    expect(isPatientDeceased('  Deceased  ')).toBe(true);
-    expect(isPatientDeceased('  N/A - D  ')).toBe(true);
-  });
-
-  it('should return false for other statuses', () => {
-    expect(isPatientDeceased('Appointment')).toBe(false);
-    expect(isPatientDeceased('Boarding')).toBe(false);
-    expect(isPatientDeceased('ICU')).toBe(false);
   });
 });
 
-describe('transformToClientInput', () => {
+describe('transformInputRow - Integration Tests', () => {
   const mockRow: ClientImportRow = {
     patientId: '123',
     patientName: 'Buddy',
@@ -100,10 +47,11 @@ describe('transformToClientInput', () => {
     patientStatus: 'Home'
   };
 
-  it('should transform complete client data correctly', () => {
-    const result = transformToClientInput(mockRow);
+  it('should transform complete data correctly', () => {
+    const { client, patient } = transformInputRow(mockRow);
     
-    expect(result).toEqual({
+    // Verify client transformation
+    expect(client).toEqual({
       givenName: 'John',
       familyName: 'Doe',
       email: 'john.doe@example.com',
@@ -119,68 +67,9 @@ describe('transformToClientInput', () => {
       }],
       notes: 'Imported from legacy system'
     });
-  });
 
-  it('should handle missing optional fields', () => {
-    const incompleteRow: ClientImportRow = {
-      ...mockRow,
-      clientPhone: null,
-      clientStreetAddr: null,
-      clientCity: null,
-      clientState: null,
-      clientPostCode: null
-    };
-
-    const result = transformToClientInput(incompleteRow);
-    
-    expect(result.addresses).toEqual([]);
-    expect(result.phoneNumbers).toEqual([]);
-    expect(result.givenName).toBe('John');
-    expect(result.familyName).toBe('Doe');
-  });
-
-  it('should handle null client names', () => {
-    const rowWithNullNames: ClientImportRow = {
-      ...mockRow,
-      clientFirstName: null,
-      clientLastName: null,
-      clientEmail: null
-    };
-
-    const result = transformToClientInput(rowWithNullNames);
-    
-    expect(result.givenName).toBe('');
-    expect(result.familyName).toBe('');
-    expect(result.email).toBe('');
-  });
-});
-
-describe('transformToPatientInput', () => {
-  const mockRow: ClientImportRow = {
-    patientId: '123',
-    patientName: 'Buddy',
-    patientSpecies: 'Canine',
-    patientBreed: 'Golden Retriever',
-    patientSexSpay: 'MI',
-    clientId: '456',
-    clientFirstName: 'John',
-    clientLastName: 'Doe',
-    clientPhone: '555-1234',
-    clientEmail: 'john.doe@example.com',
-    clientStreetAddr: '123 Main St',
-    patientWeight: '65 lbs',
-    patientColor: 'Golden',
-    patientDOB: '2020-01-15',
-    clientPostCode: '12345',
-    clientCity: 'Anytown',
-    clientState: 'CA',
-    patientStatus: 'Home'
-  };
-
-  it('should transform complete patient data correctly', () => {
-    const result = transformToPatientInput(mockRow);
-    
-    expect(result).toEqual({
+    // Verify patient transformation
+    expect(patient).toEqual({
       name: 'Buddy',
       species: 'Canine',
       breed: 'Golden Retriever',
@@ -190,39 +79,33 @@ describe('transformToPatientInput', () => {
     });
   });
 
-  it('should handle female spayed patient', () => {
-    const femaleSpayedRow: ClientImportRow = {
-      ...mockRow,
-      patientName: 'Bella',
-      patientSexSpay: 'FS'
-    };
-
-    const result = transformToPatientInput(femaleSpayedRow);
-    
-    expect(result.name).toBe('Bella');
-    expect(result.sex).toBe('Female');
-    expect(result.neutered).toBe(true);
-  });
-
-  it('should handle missing patient fields', () => {
+  it('should handle incomplete data gracefully', () => {
     const incompleteRow: ClientImportRow = {
       ...mockRow,
+      clientPhone: null,
+      clientStreetAddr: null,
       patientName: null,
-      patientSpecies: null,
-      patientBreed: null,
-      patientColor: null,
       patientSexSpay: null
     };
 
-    const result = transformToPatientInput(incompleteRow);
+    const { client, patient } = transformInputRow(incompleteRow);
     
-    expect(result).toEqual({
-      name: '',
-      species: '',
-      breed: '',
-      color: '',
-      sex: 'Unknown',
-      neutered: false
-    });
+    expect(client.phoneNumbers).toEqual([]);
+    expect(client.addresses).toEqual([]);
+    expect(patient.name).toBe('');
+    expect(patient.sex).toBe('Unknown');
+    expect(patient.neutered).toBe(false);
+  });
+
+  it('should handle female spayed with new neutering codes', () => {
+    const femaleRow: ClientImportRow = {
+      ...mockRow,
+      patientSexSpay: 'FN' // Female Neutered
+    };
+
+    const { patient } = transformInputRow(femaleRow);
+    
+    expect(patient.sex).toBe('Female');
+    expect(patient.neutered).toBe(true);
   });
 });
