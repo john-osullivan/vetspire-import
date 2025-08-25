@@ -29,6 +29,12 @@ async function main() {
             description: 'Limit number of records to process (for testing)',
             default: undefined
         })
+        .option('verbose', {
+            alias: 'v',
+            type: 'boolean',
+            description: 'Print request and response bodies for every API call',
+            default: false
+        })
         .strict(false)
         .parserConfiguration({ 'populate--': true })
         .help()
@@ -43,7 +49,6 @@ async function main() {
     try {
         const csvFile = argv['csv-file'] || argv._[0] as string;
         console.log(`Reading CSV file: ${csvFile}`);
-        console.log('argv: ', JSON.stringify(argv, null, 2));
         const records = readCsvFile(csvFile);
         console.log(`Found ${records.length} client-patient records`);
 
@@ -54,21 +59,23 @@ async function main() {
             console.log(`Processing first ${recordsToProcess.length} records (limit applied)`);
         }
 
-        const sendApiRequests = argv['full-send'] as boolean;
-        const useRealLocation = argv.uptown as boolean;
 
-        if (sendApiRequests) {
+        const options = {
+            sendApiRequests: argv['full-send'] as boolean,
+            useRealLocation: argv.uptown as boolean,
+            verbose: argv.verbose as boolean
+        };
+
+        if (options.sendApiRequests) {
             console.log('=� FULL SEND MODE - Making real API calls!');
         } else {
             console.log('>� DRY RUN MODE - No real API calls will be made');
         }
 
-        console.log('Processing records...\n');
-
-        const results = await processAll(recordsToProcess, sendApiRequests, useRealLocation);
+        const results = await processAll(recordsToProcess, options);
 
         console.log(`\n Import completed!`);
-        if (!sendApiRequests) {
+        if (!options.sendApiRequests) {
             console.log('   (This was a dry run - use --full-send to actually import)');
         }
 

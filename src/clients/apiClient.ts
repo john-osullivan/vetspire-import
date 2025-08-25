@@ -1,5 +1,6 @@
 import { config } from 'dotenv';
 import { ClientInput, PatientInput, ClientResponse, PatientResponse } from '../types/apiTypes';
+import { ImportOptions } from '../types/importOptions';
 import { rateLimit } from '../services/rateLimiter';
 
 config();
@@ -15,28 +16,57 @@ async function graphqlRequest<T>(query: string, variables?: any): Promise<T> {
     params.append('query', query);
   }
 
+  // Verbose logging support
+  const verbose = (variables && variables.__verbose) || false;
+  if (verbose) {
+    console.log('GraphQL Request:');
+    // console.log('Query:', query);
+    console.log('Variables:', JSON.stringify(variables, null, 2));
+  }
+
   const response = await fetch(process.env.VETSPIRE_API_URL!, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json,application/graphql-response+json',
       'Authorization': process.env.VETSPIRE_API_KEY!
     },
     body: params
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  let responseText;
+  try {
+    responseText = await response.text();
+  } catch (e) {
+    responseText = '[Could not read response body]';
   }
 
-  const result = await response.json();
+  if (verbose) {
+    console.log('GraphQL Response Body:', responseText);
+  }
+
+  if (!response.ok) {
+    console.error(`GraphQL HTTP Error ${response.status}: ${response.statusText}`);
+    console.error('Response body:', responseText);
+    throw new Error(`HTTP ${response.status}: ${response.statusText} - Body: ${responseText}`);
+  }
+
+  let result;
+  try {
+    result = JSON.parse(responseText);
+  } catch (e) {
+    console.error('Failed to parse response as JSON:', e);
+    throw new Error('Failed to parse response as JSON');
+  }
   if (result.errors) {
+    console.error('GraphQL Error:', JSON.stringify(result.errors));
     throw new Error(`GraphQL Error: ${JSON.stringify(result.errors)}`);
   }
 
   return result.data;
 }
 
-export async function createClient(input: ClientInput, sendApiRequests: boolean = false, useRealLocation: boolean = false): Promise<ClientResponse> {
+export async function createClient(input: ClientInput, options: ImportOptions = {}): Promise<ClientResponse> {
   await rateLimit();
   const query = `
     mutation CreateClient($input: ClientInput!) {
@@ -106,19 +136,19 @@ export async function createClient(input: ClientInput, sendApiRequests: boolean 
     }`;
 
   // Set the primary location ID based on the mode
-  const locationId = useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
+  const locationId = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
   const inputWithLocation = { ...input, primaryLocationId: locationId };
 
-  if (!sendApiRequests) {
-    const locationDesc = useRealLocation ? 'REAL' : 'TEST';
+  if (!options.sendApiRequests) {
+    const locationDesc = options.useRealLocation ? 'REAL' : 'TEST';
     console.log(`DRY RUN - Would send createClient mutation with ${locationDesc} location (${locationId}):`, JSON.stringify(inputWithLocation, null, 2));
     return { createClient: { id: 'dry-run-client-id', givenName: input.givenName, familyName: input.familyName } };
   }
 
-  return await graphqlRequest<ClientResponse>(query, { input: inputWithLocation });
+  return await graphqlRequest<ClientResponse>(query, { input: inputWithLocation, __verbose: options.verbose });
 }
 
-export async function createPatient(clientId: string, input: PatientInput, sendApiRequests: boolean = false, useRealLocation: boolean = false): Promise<PatientResponse> {
+export async function createPatient(clientId: string, input: PatientInput, options: ImportOptions = {}): Promise<PatientResponse> {
   await rateLimit();
   const query = `
     mutation CreatePatient($clientId: ID!, $input: PatientInput!) {
@@ -157,13 +187,13 @@ export async function createPatient(clientId: string, input: PatientInput, sendA
       }
     }`;
 
-  if (!sendApiRequests) {
-    const locationDesc = useRealLocation ? 'REAL' : 'TEST';
+  if (!options.sendApiRequests) {
+    const locationDesc = options.useRealLocation ? 'REAL' : 'TEST';
     console.log(`DRY RUN - Would send createPatient mutation with clientId: ${clientId} and input:`, JSON.stringify(input, null, 2));
     return { createPatient: { id: 'dry-run-patient-id', name: input.name, species: input.species } };
   }
 
-  return await graphqlRequest<PatientResponse>(query, { clientId, input });
+  return await graphqlRequest<PatientResponse>(query, { clientId, input, __verbose: options.verbose });
 }
 
 // Helper methods for idempotent imports - check if records already exist
