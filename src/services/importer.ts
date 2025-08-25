@@ -61,15 +61,21 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     }
 
     const results = {
-        successful: 0,
-        failed: 0,
+        successfulClients: 0,
+        successfulPatients: 0,
+        failedClients: 0,
+        failedPatients: 0,
         skippedClients: 0,
         skippedPatients: 0,
-        failedClients: [] as { name: string; email: string }[],
-        failedPatients: [] as { pet: string; clientEmail: string }[]
+        failedClientsList: [] as { name: string; email: string }[],
+        failedPatientsList: [] as { pet: string; clientEmail: string }[]
     };
 
-    for (const record of records) {
+    let lastSuccessful = 0;
+    let lastFailed = 0;
+    let lastSkipped = 0;
+    for (let i = 0; i < records.length; i++) {
+        const record = records[i];
         const { client: clientInput, patient: patientInput, metadata } = transformInputRow(record);
         let client = findExistingClient(clientInput);
         let clientId;
@@ -77,14 +83,15 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
             try {
                 const clientResponse = await createClient(clientInput, options);
                 client = clientResponse.createClient;
-                results.successful++;
+                results.successfulClients++;
             } catch (err) {
-                results.failed++;
-                results.failedClients.push({
+                results.failedClients++;
+                results.failedClientsList.push({
                     name: `${clientInput.givenName} ${clientInput.familyName}`,
                     email: clientInput.email || ''
                 });
                 console.error(`Error creating client for ${clientInput.givenName} ${clientInput.familyName}:`, err);
+                // Progress log still counts this record, so no continue here
                 continue;
             }
         } else {
@@ -98,10 +105,10 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
             try {
                 const patientResponse = await createPatient(clientId, patientInput, options);
                 patient = patientResponse.createPatient;
-                results.successful++;
+                results.successfulPatients++;
             } catch (err) {
-                results.failed++;
-                results.failedPatients.push({
+                results.failedPatients++;
+                results.failedPatientsList.push({
                     pet: `${patientInput.name} (${clientInput.email || ''})`,
                     clientEmail: clientInput.email || ''
                 });
@@ -111,22 +118,36 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         } else {
             results.skippedPatients++;
         }
+
+        // Emit progress every 10 records
+        if ((i + 1) % 10 === 0 || i === records.length - 1) {
+            const totalSuccessful = results.successfulClients + results.successfulPatients;
+            const totalFailed = results.failedClients + results.failedPatients;
+            const totalSkipped = results.skippedClients + results.skippedPatients;
+            console.log(`Progress: Processed ${i + 1} of ${records.length} records. ${totalSuccessful} (+${totalSuccessful - lastSuccessful}) successful, ${totalFailed} failed (+${totalFailed - lastFailed}), ${totalSkipped} skipped (+${totalSkipped - lastSkipped}).`);
+
+            lastSuccessful = totalSuccessful;
+            lastFailed = totalFailed;
+            lastSkipped = totalSkipped;
+        }
     }
 
     console.log('\nIdempotent Import Summary:');
-    console.log(`Successfully created: ${results.successful}`);
-    console.log(`Failed to create: ${results.failed}`);
+    console.log(`Successfully created clients: ${results.successfulClients}`);
+    console.log(`Successfully created patients: ${results.successfulPatients}`);
+    console.log(`Failed to create clients: ${results.failedClients}`);
+    console.log(`Failed to create patients: ${results.failedPatients}`);
     console.log(`Skipped existing clients: ${results.skippedClients}`);
     console.log(`Skipped existing patients: ${results.skippedPatients}`);
-    if (results.failedClients.length > 0) {
+    if (results.failedClientsList.length > 0) {
         console.log('Failed to create clients:');
-        results.failedClients.forEach(c => {
+        results.failedClientsList.forEach(c => {
             console.log(`- ${c.name} (${c.email})`);
         });
     }
-    if (results.failedPatients.length > 0) {
+    if (results.failedPatientsList.length > 0) {
         console.log('Failed to create patients:');
-        results.failedPatients.forEach(p => {
+        results.failedPatientsList.forEach(p => {
             console.log(`- ${p.pet}`);
         });
     }

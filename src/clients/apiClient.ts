@@ -2,6 +2,10 @@ import { config } from 'dotenv';
 import { ClientInput, PatientInput, ClientResponse, PatientResponse } from '../types/apiTypes';
 import { ImportOptions } from '../types/importOptions';
 import { rateLimit } from '../services/rateLimiter';
+import { CREATE_CLIENT_MUTATION } from './graphql/createClient.gql';
+import { CREATE_PATIENT_MUTATION } from './graphql/createPatient.gql';
+import { GET_CLIENTS_QUERY } from './graphql/getClients.gql';
+import { GET_PATIENTS_QUERY } from './graphql/getPatients.gql';
 
 config();
 
@@ -59,8 +63,9 @@ async function graphqlRequest<T>(query: string, variables?: any): Promise<T> {
     throw new Error('Failed to parse response as JSON');
   }
   if (result.errors) {
-    console.error('GraphQL Error:', JSON.stringify(result.errors));
-    throw new Error(`GraphQL Error: ${JSON.stringify(result.errors)}`);
+    console.error('GraphQL Error:', JSON.stringify(result.errors, null, 2));
+    console.log();
+    throw new Error(`GraphQL Error: ${JSON.stringify(result.errors, null, 2)}`);
   }
 
   return result.data;
@@ -68,72 +73,7 @@ async function graphqlRequest<T>(query: string, variables?: any): Promise<T> {
 
 export async function createClient(input: ClientInput, options: ImportOptions = {}): Promise<ClientResponse> {
   await rateLimit();
-  const query = `
-    mutation CreateClient($input: ClientInput!) {
-      createClient(input: $input) {
-        id
-        orgId
-        name
-        givenName
-        familyName
-        email
-        secondaryEmail
-        businessName
-        dateOfBirth
-        title
-        notes
-        privateNotes
-        pronouns
-        pronounsOther
-        historicalId
-        mergeIdentification
-        identification
-        billingId
-        isActive
-        isMerged
-        taxExempt
-        stopReminders
-        declineEmail
-        declinePhone
-        declineRdvm
-        declineSecondaryEmail
-        insertedAt
-        updatedAt
-        verifiedAt
-        emailVerifiedDate
-        secondaryEmailVerifiedDate
-        sentEmailVerificationDate
-        sentSecondaryEmailVerificationDate
-        lastSyncedAt
-        accountCredit
-        lifetimeValue
-        trailingYearValue
-        paymentCount
-        primaryLocationId
-        clientReferralSourceId
-        customReferralSource
-        stripeCustomerId
-        cardconnectToken
-        cardconnectTokenLast4
-        cardconnectExpiry
-        squareCardId
-        addresses {
-          id
-          line1
-          city
-          state
-          postalCode
-        }
-        phoneNumbers {
-          id
-          value
-        }
-        preferredPhoneNumber {
-          id
-          value
-        }
-      }
-    }`;
+  const query = CREATE_CLIENT_MUTATION;
 
   // Set the primary location ID based on the mode
   const locationId = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
@@ -150,42 +90,7 @@ export async function createClient(input: ClientInput, options: ImportOptions = 
 
 export async function createPatient(clientId: string, input: PatientInput, options: ImportOptions = {}): Promise<PatientResponse> {
   await rateLimit();
-  const query = `
-    mutation CreatePatient($clientId: ID!, $input: PatientInput!) {
-      createPatient(clientId: $clientId, input: $input) {
-        id
-        name
-        species
-        breed
-        sex
-        sexTerm
-        birthDate
-        birthYear
-        birthMonth
-        birthDay
-        age
-        isEstimatedAge
-        clientId
-        microchip
-        microchipRegistered
-        neutered
-        neuterDate
-        isDeceased
-        deceasedDate
-        goalWeight
-        isEstimatedWeight
-        profileImageUrl
-        insertedAt
-        updatedAt
-        verifiedAt
-        lastSyncedAt
-        client {
-          id
-          givenName
-          familyName
-        }
-      }
-    }`;
+  const query = CREATE_PATIENT_MUTATION;
 
   if (!options.sendApiRequests) {
     const locationDesc = options.useRealLocation ? 'REAL' : 'TEST';
@@ -200,17 +105,7 @@ export async function createPatient(clientId: string, input: PatientInput, optio
 
 export async function findExistingClients(sendApiRequests: boolean = false, limit: number = 100, offset: number = 0) {
   await rateLimit();
-  const query = `
-    query GetClients($limit: Int, $offset: Int) {
-      clients(limit: $limit, offset: $offset) {
-        id
-        givenName
-        familyName
-        email
-        historicalId
-        isActive
-      }
-    }`;
+  const query = GET_CLIENTS_QUERY;
 
   if (!sendApiRequests) {
     console.log('DRY RUN - Would query existing clients');
@@ -231,22 +126,7 @@ export async function findExistingClients(sendApiRequests: boolean = false, limi
 
 export async function findExistingPatients(sendApiRequests: boolean = false, limit: number = 100, offset: number = 0) {
   await rateLimit();
-  const query = `
-    query GetPatients($limit: Int, $offset: Int) {
-      patients(limit: $limit, offset: $offset) {
-        id
-        name
-        species
-        historicalId
-        isActive
-        client {
-          id
-          givenName
-          familyName
-          email
-        }
-      }
-    }`;
+  const query = GET_PATIENTS_QUERY;
 
   if (!sendApiRequests) {
     console.log('DRY RUN - Would query existing patients');
