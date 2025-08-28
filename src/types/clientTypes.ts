@@ -40,11 +40,9 @@ export const EMPTY_CLIENT: ClientImportRow = {
   patientStatus: null
 };
 
-export function isClientImportRow(row: any): row is ClientImportRow {
+export function isClientImportRow(row: unknown): row is ClientImportRow {
+  if (typeof row !== 'object' || row === null) return false;
+  const r = row as Record<string, unknown>;
   const requiredFields = Object.keys(EMPTY_CLIENT);
-  return (
-    typeof row === 'object' &&
-    row !== null &&
-    requiredFields.every(field => field in row)
-  );
+  return requiredFields.every(field => field in r);
 }

@@ -2,9 +2,9 @@
 - Write basic integration tests to evaluate whether the overall system is behaving. Don't worry about exact unit tests, I can debug myself to figure out which part is broken. The goal is being able to easily check whether things are working by calling npm run test.
 - All of my functionality should be triggerable from a terminal command, all outputs should be saved in the outputs directory and named such that they sort chronologically.
 - Prefer DRY code which reuses more generic functions, even if repeating yourself would be more "explicit".
-- Never use Typescript's `any`. Use unknown, parsers, and type guards to maintain type safety throughout runtime.
+- Never use Typescript's `any`. Use unknown, parsers, type guards, and null assertions to maintain type safety throughout runtime.
 - Use a library to parse CLI arguments, something like yargs, to help keep the code well-organized. I like the following code organization concepts:
   - "commands" group the interface functions that my program exposes to callers
   - "services" group together the business logic code implementing this interface, generally encapsulating chunks of our system. For example, we might have one service which handles CSV operations.
-  - "clients" group together "adapter" functions for our third parties, providing a cleaner interface for our business logic. I expect we'll have 2 clients, pdfClient & vetspireClient, and the vetspireClient will export helper functions like `getUserByEmail(email:string)`.
+  - "clients" group together "adapter" functions for our third parties, providing a cleaner interface for our business logic.
 - When we've established a good threshold for working functionality, commit to git.

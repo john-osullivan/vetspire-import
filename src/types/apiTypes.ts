@@ -147,6 +147,8 @@ export interface Patient extends BaseEntity, PatientBase {
   client?: Client;
   verifiedAt?: DateTime;
   lastSyncedAt?: NaiveDateTime;
+  historicalId?: string;
+  primaryLocationId?: ID;
 }
 
 export interface PatientInput extends PatientBase {
@@ -155,6 +157,7 @@ export interface PatientInput extends PatientBase {
   hisa?: string;
   hisaRegistered?: boolean;
   historicalId?: string;
+  primaryLocationId?: ID;
   identification?: string;
   isActive?: boolean;
   isDnr?: boolean;

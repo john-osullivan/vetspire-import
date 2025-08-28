@@ -1,7 +1,7 @@
 import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
-import { createClient, createPatient, fetchAllExistingRecords, updateClient } from "../clients/apiClient.js";
-import { Client } from '../types/apiTypes';
+import { createClient, createPatient, fetchAllExistingRecords, updateClient, updatePatient } from "../clients/apiClient.js";
+import { Client, Patient } from '../types/apiTypes';
 import { ImportOptions } from "../types/importOptions";
 
 export async function processOne(record: ClientImportRow, options: ImportOptions) {
@@ -162,8 +162,8 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
 export async function updateImportedPrimaryLocations(options: ImportOptions = {}) {
     const send = !!options.sendApiRequests;
 
-    console.log('Scanning existing records to find imported clients...');
-    const { clients } = await fetchAllExistingRecords(send);
+    console.log('Scanning existing records to find imported clients and patients...');
+    const { clients, patients } = await fetchAllExistingRecords(send);
 
     // Narrow clients to typed Client[] and detect imported ones with safe runtime checks
     const typedClients = (clients as unknown) as Client[];
@@ -173,9 +173,17 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
         return hasHistorical || notes.includes('Imported from legacy system');
     });
 
-    console.log(`Found ${importedClients.length} imported clients to examine`);
+    // Narrow patients to typed Patient[] and detect imported ones with safe runtime checks
+    const typedPatients = (patients as unknown) as Patient[];
+    const importedPatients: Patient[] = typedPatients.filter(p => {
+        const notes = (p as any).notes || (p as any).privateNotes || '';
+        const hasHistorical = typeof p.historicalId === 'string' && p.historicalId.length > 0;
+        return hasHistorical || (typeof notes === 'string' && notes.includes('Imported from legacy system'));
+    });
 
-    let updated = 0;
+    console.log(`Found ${importedClients.length} imported clients and ${importedPatients.length} imported patients to examine`);
+
+    let updatedClients = 0;
     for (const client of importedClients) {
         const currentLocation = client.primaryLocationId;
 
@@ -187,12 +195,30 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
         try {
             await updateClient(client.id, { primaryLocationId: targetLocation }, options);
             console.log(`Updated client ${client.id} primaryLocationId -> ${targetLocation}`);
-            updated++;
+            updatedClients++;
         } catch (err) {
             console.error(`Failed to update client ${client.id}:`, err);
         }
     }
 
-    console.log(`Update complete. Clients updated: ${updated}`);
-    return { updated };
+    let updatedPatients = 0;
+    for (const patient of importedPatients) {
+        // Patients may not have a primaryLocationId in our types, but the API may accept it via PatientInput
+        const currentLocation = (patient as any).primaryLocationId;
+        const isPlaceholder = typeof currentLocation === 'string' && (currentLocation === 'TEST_LOCATION' || currentLocation.length < 10);
+        if (!isPlaceholder) continue;
+
+        const targetLocation = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
+
+        try {
+            await updatePatient(patient.id, { primaryLocationId: targetLocation }, options);
+            console.log(`Updated patient ${patient.id} primaryLocationId -> ${targetLocation}`);
+            updatedPatients++;
+        } catch (err) {
+            console.error(`Failed to update patient ${patient.id}:`, err);
+        }
+    }
+
+    console.log(`Update complete. Clients updated: ${updatedClients}, Patients updated: ${updatedPatients}`);
+    return { updatedClients, updatedPatients };
 }

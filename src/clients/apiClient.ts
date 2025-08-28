@@ -11,10 +11,10 @@ import { UPDATE_PATIENT_MUTATION } from './graphql/updatePatient.gql';
 
 config();
 
-async function graphqlRequest<T>(query: string, variables?: any): Promise<T> {
+async function graphqlRequest<T>(query: string, variables?: unknown): Promise<T> {
   const params = new URLSearchParams();
 
-  if (variables) {
+  if (variables && typeof variables === 'object') {
     // Include variables in the GraphQL query
     params.append('query', query);
     params.append('variables', JSON.stringify(variables));
@@ -22,8 +22,8 @@ async function graphqlRequest<T>(query: string, variables?: any): Promise<T> {
     params.append('query', query);
   }
 
-  // Verbose logging support
-  const verbose = (variables && variables.__verbose) || false;
+  // Verbose logging support - __verbose may be present on variables object
+  const verbose = typeof variables === 'object' && variables !== null && (variables as Record<string, unknown>).__verbose === true;
   if (verbose) {
     console.log('GraphQL Request:');
     // console.log('Query:', query);
