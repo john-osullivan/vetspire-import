@@ -1,6 +1,6 @@
 import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
-import { createClient, createPatient, fetchAllExistingRecords } from "../clients/apiClient.js";
+import { createClient, createPatient, fetchAllExistingRecords, updateClient } from "../clients/apiClient.js";
 import { ImportOptions } from "../types/importOptions";
 
 export async function processOne(record: ClientImportRow, options: ImportOptions) {
@@ -153,4 +153,43 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     }
 
     return results;
+}
+
+/**
+ * Scan existing clients for those created by our importer and update their primaryLocationId
+ */
+export async function updateImportedPrimaryLocations(options: ImportOptions = {}) {
+    const send = !!options.sendApiRequests;
+
+    console.log('Scanning existing records to find imported clients...');
+    const { clients } = await fetchAllExistingRecords(send);
+
+    const importedClients = clients.filter((c: any) => {
+        const notesMatch = c.notes && typeof c.notes === 'string' && c.notes.includes('Imported from legacy system');
+        const hasHistorical = !!c.historicalId;
+        return notesMatch || hasHistorical;
+    });
+
+    console.log(`Found ${importedClients.length} imported clients to examine`);
+
+    let updated = 0;
+    for (const client of importedClients) {
+        const currentLocation = (client as any).primaryLocationId;
+
+        const isPlaceholder = typeof currentLocation === 'string' && (currentLocation === 'TEST_LOCATION' || currentLocation.length < 10);
+        if (!isPlaceholder) continue;
+
+        const targetLocation = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
+
+        try {
+            await updateClient(client.id, { primaryLocationId: targetLocation }, options);
+            console.log(`Updated client ${client.id} primaryLocationId -> ${targetLocation}`);
+            updated++;
+        } catch (err) {
+            console.error(`Failed to update client ${client.id}:`, err);
+        }
+    }
+
+    console.log(`Update complete. Clients updated: ${updated}`);
+    return { updated };
 }

@@ -6,6 +6,8 @@ import { CREATE_CLIENT_MUTATION } from './graphql/createClient.gql';
 import { CREATE_PATIENT_MUTATION } from './graphql/createPatient.gql';
 import { GET_CLIENTS_QUERY } from './graphql/getClients.gql';
 import { GET_PATIENTS_QUERY } from './graphql/getPatients.gql';
+import { UPDATE_CLIENT_MUTATION } from './graphql/updateClient.gql';
+import { UPDATE_PATIENT_MUTATION } from './graphql/updatePatient.gql';
 
 config();
 
@@ -273,4 +275,28 @@ export async function fetchAllExistingRecords(sendApiRequests: boolean = false) 
   console.log(`Found ${allClients.length} existing clients and ${allPatients.length} existing patients`);
 
   return { clients: allClients, patients: allPatients };
+}
+
+export async function updateClient(id: string, input: Partial<ClientInput>, options: ImportOptions = {}) {
+  await rateLimit();
+  const query = UPDATE_CLIENT_MUTATION;
+  // Pass-through: caller decides what to update. Keep dry-run logging consistent with createPatient.
+  if (!options.sendApiRequests) {
+    console.log(`DRY RUN - Would send updateClient mutation for id ${id} with input:`, JSON.stringify(input, null, 2));
+    return { updateClient: { id, ...input } };
+  }
+
+  return await graphqlRequest(query, { id, input, __verbose: options.verbose });
+}
+
+export async function updatePatient(id: string, input: Partial<PatientInput>, options: ImportOptions = {}) {
+  await rateLimit();
+  const query = UPDATE_PATIENT_MUTATION;
+
+  if (!options.sendApiRequests) {
+    console.log(`DRY RUN - Would send updatePatient mutation for id ${id} with input:`, JSON.stringify(input, null, 2));
+    return { updatePatient: { id, ...input } };
+  }
+
+  return await graphqlRequest(query, { id, input, __verbose: options.verbose });
 }

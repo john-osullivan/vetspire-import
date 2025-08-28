@@ -4,6 +4,7 @@ query GetPatients($limit: Int, $offset: Int) {
     id
     name
     species
+    historicalId
     client {
       id
       email
