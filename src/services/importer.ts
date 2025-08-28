@@ -1,6 +1,7 @@
 import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
 import { createClient, createPatient, fetchAllExistingRecords, updateClient } from "../clients/apiClient.js";
+import { Client } from '../types/apiTypes';
 import { ImportOptions } from "../types/importOptions";
 
 export async function processOne(record: ClientImportRow, options: ImportOptions) {
@@ -164,17 +165,19 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
     console.log('Scanning existing records to find imported clients...');
     const { clients } = await fetchAllExistingRecords(send);
 
-    const importedClients = clients.filter((c: any) => {
-        const notesMatch = c.notes && typeof c.notes === 'string' && c.notes.includes('Imported from legacy system');
-        const hasHistorical = !!c.historicalId;
-        return notesMatch || hasHistorical;
+    // Narrow clients to typed Client[] and detect imported ones with safe runtime checks
+    const typedClients = (clients as unknown) as Client[];
+    const importedClients: Client[] = typedClients.filter(c => {
+        const notes = typeof c.notes === 'string' ? c.notes : '';
+        const hasHistorical = typeof c.historicalId === 'string' && c.historicalId.length > 0;
+        return hasHistorical || notes.includes('Imported from legacy system');
     });
 
     console.log(`Found ${importedClients.length} imported clients to examine`);
 
     let updated = 0;
     for (const client of importedClients) {
-        const currentLocation = (client as any).primaryLocationId;
+        const currentLocation = client.primaryLocationId;
 
         const isPlaceholder = typeof currentLocation === 'string' && (currentLocation === 'TEST_LOCATION' || currentLocation.length < 10);
         if (!isPlaceholder) continue;

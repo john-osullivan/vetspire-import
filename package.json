@@ -11,7 +11,8 @@
     "import-csv": "tsx src/commands/import-csv.ts",
     "rollback-import": "tsx src/commands/rollback-import.ts",
     "sync-commands": "node scripts/sync-commands.js",
-    "postinstall": "npm run sync-commands"
+    "postinstall": "npm run sync-commands",
+    "update-import": "tsx src/commands/update-import.ts"
   },
   "author": "",
   "license": "ISC",
