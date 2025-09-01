@@ -3,7 +3,7 @@ import { ClientImportRow, EMPTY_CLIENT } from '../types/clientTypes.js';
 export function parseClientPatientRecords(pdfText: string): ClientImportRow[] {
   const records: ClientImportRow[] = [];
   const lines = pdfText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-
+  console.log(JSON.stringify(lines.slice(0, 170), null, 2));
   let currentRecord: ClientImportRow | null = null;
   let i = 0;
 
@@ -33,8 +33,15 @@ export function parseClientPatientRecords(pdfText: string): ClientImportRow[] {
       if (currentRecord && Object.keys(EMPTY_CLIENT).includes(key)) {
         // assign via intermediate record to satisfy typing
         const rec = currentRecord as unknown as Record<string, unknown>;
-        rec[key] = typeof value === 'string' ? value : null;
-        i += 2; // Skip both key and value lines
+        if (Object.keys(EMPTY_CLIENT).includes(value)) {
+          // If the next non-blank line is a key, then the current key
+          // has no value for this record. Add nothing, advance i by only 1
+          // so that we might import the next row.
+          i += 2;
+        } else {
+          rec[key] = typeof value === 'string' ? value : null;
+          i += 2; // Skip both key and value lines
+        }
         continue;
       }
     }

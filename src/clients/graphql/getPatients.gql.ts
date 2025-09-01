@@ -4,9 +4,28 @@ query GetPatients($limit: Int, $offset: Int) {
     id
     name
     species
-  historicalId
-  privateNotes
-  primaryLocationId
+    breed
+    sex
+    sexTerm
+    birthDate
+    birthYear
+    birthMonth
+    birthDay
+    age
+    isEstimatedAge
+    microchip
+    microchipRegistered
+    neutered
+    neuterDate
+    isDeceased
+    deceasedDate
+    goalWeight
+    isEstimatedWeight
+    profileImageUrl
+    historicalId
+    privateNotes
+    verifiedAt
+    lastSyncedAt
     client {
       id
       email
