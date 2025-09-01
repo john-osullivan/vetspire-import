@@ -35,6 +35,12 @@ async function main() {
             description: 'Print request and response bodies for every API call',
             default: false
         })
+        .option('track-results', {
+            alias: 't',
+            type: 'boolean',
+            description: 'Generate detailed JSON output files with success/failure tracking',
+            default: false
+        })
         .strict(false)
         .parserConfiguration({ 'populate--': true })
         .help()
@@ -63,7 +69,8 @@ async function main() {
         const options = {
             sendApiRequests: argv['full-send'] as boolean,
             useRealLocation: argv.uptown as boolean,
-            verbose: argv.verbose as boolean
+            verbose: argv.verbose as boolean,
+            trackResults: argv['track-results'] as boolean
         };
 
         if (options.sendApiRequests) {

@@ -12,7 +12,8 @@
     "rollback-import": "tsx src/commands/rollback-import.ts",
     "sync-commands": "node scripts/sync-commands.js",
     "postinstall": "npm run sync-commands",
-    "update-import": "tsx src/commands/update-import.ts"
+    "update-import": "tsx src/commands/update-import.ts",
+    "typecheck": "tsc"
   },
   "author": "",
   "license": "ISC",

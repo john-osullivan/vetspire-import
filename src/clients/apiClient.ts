@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { ClientInput, PatientInput, ClientResponse, PatientResponse } from '../types/apiTypes';
+import { ClientInput, PatientInput, ClientResponse, PatientResponse, Patient } from '../types/apiTypes';
 import { ImportOptions } from '../types/importOptions';
 import { rateLimit } from '../services/rateLimiter';
 import { CREATE_CLIENT_MUTATION } from './graphql/createClient.gql';
@@ -147,6 +147,7 @@ export async function findExistingPatients(sendApiRequests: boolean = false, lim
         givenName?: string;
         familyName?: string;
         email?: string;
+        primaryLocationId?: string;
       };
     }>
   }>(query, { limit, offset });
@@ -260,7 +261,7 @@ export async function fetchAllExistingRecords(sendApiRequests: boolean = false) 
   );
   if (!Array.isArray(allClients)) allClients = [];
 
-  let allPatients = await autopaginate(
+  let allPatients: Patient[] = await autopaginate(
     async (limit, offset) => {
       const response = await findExistingPatients(sendApiRequests, limit, offset);
       return response && Array.isArray(response.patients) ? response.patients : [];

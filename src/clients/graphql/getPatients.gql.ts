@@ -10,6 +10,7 @@ query GetPatients($limit: Int, $offset: Int) {
     client {
       id
       email
+      primaryLocationId
     }
   }
 }

@@ -93,9 +93,9 @@ export interface Client extends BaseEntity, ClientBase {
   sentSecondaryEmailVerificationDate?: NaiveDateTime;
   lastSyncedAt?: NaiveDateTime;
   accountCredit?: Decimal;
-  lifetimeValue: Decimal;
-  trailingYearValue: Decimal;
-  paymentCount: number;
+  lifetimeValue?: Decimal;
+  trailingYearValue?: Decimal;
+  paymentCount?: number;
   primaryLocationId?: ID;
   clientReferralSourceId?: ID;
   patients?: Patient[];

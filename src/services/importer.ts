@@ -1,8 +1,11 @@
 import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
-import { createClient, createPatient, fetchAllExistingRecords, updateClient, updatePatient } from "../clients/apiClient.js";
+import { createClient, createPatient, fetchAllExistingRecords, findClientMatch, findPatientMatch, updateClient, updatePatient } from "../clients/apiClient.js";
 import { Client, Patient } from '../types/apiTypes';
-import { ImportOptions } from "../types/importOptions";
+import { ImportOptions, ImportResult, ClientRecord, PatientRecord, ClientFailureRecord, PatientFailureRecord } from "../types/importOptions";
+import { isClient, isPatient } from "./typeGuards.js";
+import fs from 'fs';
+import path from 'path';
 
 export async function processOne(record: ClientImportRow, options: ImportOptions) {
     // Transform the record into API-compatible formats using unified function
@@ -44,23 +47,6 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     // Fetch all existing records from server
     const { clients: existingClients, patients: existingPatients } = await fetchAllExistingRecords(true);
 
-    // Helper to find existing client by unique fields (customize as needed)
-    function findExistingClient(clientInput: any) {
-        return existingClients.find((c: any) =>
-            c.givenName?.toLowerCase() === clientInput.givenName?.toLowerCase() &&
-            c.familyName?.toLowerCase() === clientInput.familyName?.toLowerCase() &&
-            c.email?.toLowerCase() === clientInput.email?.toLowerCase()
-        );
-    }
-
-    // Helper to find existing patient by unique fields (customize as needed)
-    function findExistingPatient(patientInput: any, clientId: string) {
-        return existingPatients.find((p: any) =>
-            p.name?.toLowerCase() === patientInput.name?.toLowerCase() &&
-            p.client?.id === clientId
-        );
-    }
-
     const results = {
         successfulClients: 0,
         successfulPatients: 0,
@@ -72,52 +58,131 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         failedPatientsList: [] as { pet: string; clientEmail: string }[]
     };
 
+    // Initialize detailed tracking if requested
+    const detailedResult: ImportResult | undefined = options.trackResults ? {
+        timestamp: new Date().toISOString(),
+        totalRecords: records.length,
+        clientsCreated: [],
+        clientsSkipped: [],
+        clientsFailed: [],
+        patientsCreated: [],
+        patientsSkipped: [],
+        patientsFailed: []
+    } : undefined;
+
     let lastSuccessful = 0;
     let lastFailed = 0;
     let lastSkipped = 0;
     for (let i = 0; i < records.length; i++) {
         const record = records[i];
         const { client: clientInput, patient: patientInput, metadata } = transformInputRow(record);
-        let client = findExistingClient(clientInput);
+        let client = findClientMatch(clientInput, existingClients)?.match;
         let clientId;
         if (!client) {
             try {
                 const clientResponse = await createClient(clientInput, options);
                 client = clientResponse.createClient;
                 results.successfulClients++;
+
+                // Validate client response and track if requested
+                if (!isClient(client)) {
+                    throw new Error(`Created client missing required fields: ${JSON.stringify(client)}`);
+                }
+
+                if (detailedResult) {
+                    detailedResult.clientsCreated.push({
+                        inputRecord: record,
+                        createdClient: client
+                    });
+                }
             } catch (err) {
                 results.failedClients++;
                 results.failedClientsList.push({
                     name: `${clientInput.givenName} ${clientInput.familyName}`,
                     email: clientInput.email || ''
                 });
+
+                // Track detailed failure if requested
+                if (detailedResult) {
+                    detailedResult.clientsFailed.push({
+                        inputRecord: record,
+                        error: err instanceof Error ? err.message : String(err),
+                        timestamp: new Date().toISOString()
+                    });
+                }
+
                 console.error(`Error creating client for ${clientInput.givenName} ${clientInput.familyName}:`, err);
-                // Progress log still counts this record, so no continue here
                 continue;
             }
         } else {
             results.skippedClients++;
             clientId = client.id;
+
+            // Validate existing client and track if requested
+            if (!isClient(client)) {
+                throw new Error(`Existing client missing required fields: ${JSON.stringify(client)}`);
+            }
+
+            if (detailedResult) {
+                detailedResult.clientsSkipped.push({
+                    inputRecord: record,
+                    createdClient: client
+                });
+            }
         }
         clientId = clientId || client.id;
 
-        let patient = findExistingPatient(patientInput, clientId);
+        let patient = findPatientMatch(patientInput, clientId, existingPatients)?.match;
         if (!patient) {
             try {
                 const patientResponse = await createPatient(clientId, patientInput, options);
                 patient = patientResponse.createPatient;
                 results.successfulPatients++;
+
+                // Validate patient response and track if requested
+                if (!isPatient(patient)) {
+                    throw new Error(`Created patient missing required fields: ${JSON.stringify(patient)}`);
+                }
+
+                if (detailedResult) {
+                    detailedResult.patientsCreated.push({
+                        inputRecord: record,
+                        createdPatient: patient
+                    });
+                }
             } catch (err) {
                 results.failedPatients++;
                 results.failedPatientsList.push({
                     pet: `${patientInput.name} (${clientInput.email || ''})`,
                     clientEmail: clientInput.email || ''
                 });
+
+                // Track detailed failure if requested
+                if (detailedResult) {
+                    detailedResult.patientsFailed.push({
+                        inputRecord: record,
+                        error: err instanceof Error ? err.message : String(err),
+                        timestamp: new Date().toISOString()
+                    });
+                }
+
                 console.error(`Error creating patient ${patientInput.name} for client ${clientInput.givenName} ${clientInput.familyName}:`, err);
                 continue;
             }
         } else {
             results.skippedPatients++;
+
+            // Validate existing patient and track if requested
+            if (!isPatient(patient)) {
+                throw new Error(`Existing patient missing required fields: ${JSON.stringify(patient)}`);
+            }
+
+            if (detailedResult) {
+                detailedResult.patientsSkipped.push({
+                    inputRecord: record,
+                    createdPatient: patient
+                });
+            }
         }
 
         // Emit progress every 10 records
@@ -151,6 +216,36 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         results.failedPatientsList.forEach(p => {
             console.log(`- ${p.pet}`);
         });
+    }
+
+    // Generate JSON files if detailed tracking is enabled
+    if (detailedResult && options.trackResults) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const runType = options.sendApiRequests ? 'full' : 'dry';
+        const location = options.useRealLocation ? 'uptown' : 'test';
+        const outputDir = path.resolve(process.cwd(), 'outputs');
+
+        // Ensure outputs directory exists
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        // Write full results
+        const resultsFile = path.join(outputDir, `import-results_${runType}_${location}_${timestamp}.json`);
+        fs.writeFileSync(resultsFile, JSON.stringify(detailedResult, null, 2));
+        console.log(`\nDetailed results written to: ${resultsFile}`);
+
+        // Write failures-only file for easier analysis
+        const failuresOnly = {
+            timestamp: detailedResult.timestamp,
+            totalRecords: detailedResult.totalRecords,
+            clientsFailed: detailedResult.clientsFailed,
+            patientsFailed: detailedResult.patientsFailed
+        };
+
+        const failuresFile = path.join(outputDir, `import-failures_${runType}_${location}_${timestamp}.json`);
+        fs.writeFileSync(failuresFile, JSON.stringify(failuresOnly, null, 2));
+        console.log(`Failures-only output written to: ${failuresFile}`);
     }
 
     return results;
