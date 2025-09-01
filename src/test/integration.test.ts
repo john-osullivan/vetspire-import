@@ -7,6 +7,9 @@ import { extractTextFromPdf } from '../clients/pdfClient.js';
 // Track files created during this test run so we only remove those
 const createdFiles: string[] = [];
 
+// Honor a --no-cleanup flag passed to the test runner or NO_CLEANUP=1 env var
+const noCleanup = process.argv.includes('--no-cleanup') || process.env.NO_CLEANUP === '1';
+
 describe('PDF to CSV Integration', async () => {
   const testOutputDir = './outputs';
   const samplePdfText = await extractTextFromPdf('./advantage_labeled_export.pdf');
@@ -41,8 +44,8 @@ describe('PDF to CSV Integration', async () => {
 
   it('should write records to CSV file', () => {
     const records = parseClientPatientRecords(samplePdfText);
-  const csvPath = writeRecordsToCSV(records.slice(0, 2), testOutputDir);
-  createdFiles.push(csvPath);
+    const csvPath = writeRecordsToCSV(records.slice(0, 2), testOutputDir);
+    createdFiles.push(csvPath);
 
     expect(fs.existsSync(csvPath)).toBe(true);
 
@@ -56,11 +59,11 @@ describe('PDF to CSV Integration', async () => {
 
   it('should generate timestamped CSV filenames', async () => {
     const records = parseClientPatientRecords(samplePdfText);
-  const csvPath1 = writeRecordsToCSV(records.slice(0, 1), testOutputDir);
-  createdFiles.push(csvPath1);
-  await new Promise((res => setTimeout(res, 100)));
-  const csvPath2 = writeRecordsToCSV(records.slice(0, 1), testOutputDir);
-  createdFiles.push(csvPath2);
+    const csvPath1 = writeRecordsToCSV(records.slice(0, 1), testOutputDir);
+    createdFiles.push(csvPath1);
+    await new Promise((res => setTimeout(res, 100)));
+    const csvPath2 = writeRecordsToCSV(records.slice(0, 1), testOutputDir);
+    createdFiles.push(csvPath2);
 
     // Filenames should match the timestamped pattern; uniqueness is non-deterministic in fast tests
     expect(csvPath1).toMatch(/client-patient-records_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/);
@@ -70,6 +73,10 @@ describe('PDF to CSV Integration', async () => {
 });
 
 afterAll(() => {
+  if (noCleanup) {
+    console.log('Skipping test cleanup because --no-cleanup was provided');
+    return;
+  }
   for (const p of createdFiles) {
     try {
       if (fs.existsSync(p)) {

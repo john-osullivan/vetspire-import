@@ -1,9 +1,27 @@
+import fs from 'fs';
 import { ClientImportRow, EMPTY_CLIENT } from '../types/clientTypes.js';
+const IMPORT_KEYS = Object.keys(EMPTY_CLIENT);
 
 export function parseClientPatientRecords(pdfText: string): ClientImportRow[] {
   const records: ClientImportRow[] = [];
-  const lines = pdfText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-  console.log(JSON.stringify(lines.slice(0, 170), null, 2));
+  const lines = pdfText.split('\n').map(line => line.trim()).filter(line => line);
+
+  // Some of these lines include erroneous values where 2 key
+  // lines should've been split but weren't. For example, the line
+  // `clientStreetAddrpatientWeight` needs to be converted into 
+  // 2 lines, `clientStreetAddr` and `patientWeight`.
+  lines.forEach((line, index) => {
+    IMPORT_KEYS.forEach(key => {
+      if (line.startsWith(key) && line.length > key.length) {
+        const firstKey = line.slice(0, key.length);
+        const secondKey = line.slice(key.length);
+        lines[index] = firstKey;
+        lines.splice(index + 1, 0, secondKey);
+      }
+    })
+  });
+
+  fs.writeFileSync('./outputs/parsed_lines.json', JSON.stringify(lines, null, 2));
   let currentRecord: ClientImportRow | null = null;
   let i = 0;
 
@@ -37,7 +55,8 @@ export function parseClientPatientRecords(pdfText: string): ClientImportRow[] {
           // If the next non-blank line is a key, then the current key
           // has no value for this record. Add nothing, advance i by only 1
           // so that we might import the next row.
-          i += 2;
+          rec[key] = null;
+          i += 1;
         } else {
           rec[key] = typeof value === 'string' ? value : null;
           i += 2; // Skip both key and value lines
