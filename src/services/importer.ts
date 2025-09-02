@@ -7,39 +7,6 @@ import { isClient, isPatient } from "./typeGuards.js";
 import fs from 'fs';
 import path from 'path';
 
-export async function processOne(record: ClientImportRow, options: ImportOptions) {
-    // Transform the record into API-compatible formats using unified function
-    const { client: clientInput, patient: patientInput, metadata } = transformInputRow(record);
-    let clientResponse;
-    try {
-        // Create client first
-        clientResponse = await createClient(clientInput, options);
-    } catch (err) {
-        console.error(`Error creating client for ${record.clientFirstName} ${record.clientLastName}:`, err);
-        throw err;
-    }
-
-    let patientResponse;
-    try {
-        // Then create patient
-        patientResponse = await createPatient(clientResponse.createClient.id, patientInput, options);
-    } catch (err) {
-        console.error(`Error creating patient ${record.patientName} (${record.patientSpecies}) for client ${record.clientFirstName} ${record.clientLastName}:`, err);
-        throw err;
-    }
-
-    const status = metadata.patientIsDeceased ? 'deceased' : 'active';
-    const clientStatus = clientInput.isActive ? 'active' : 'inactive';
-
-    console.log(`Created a ${patientInput.species} named ${patientInput.name} (${status}), owned by ${clientInput.givenName} ${clientInput.familyName} (${clientStatus})`);
-
-    return {
-        client: clientResponse.createClient,
-        patient: patientResponse.createPatient,
-        metadata
-    };
-}
-
 /**
  * Idempotent import: fetch all existing clients and patients, and only create if not present.
  */
@@ -59,7 +26,7 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     };
 
     // Initialize detailed tracking if requested
-    const detailedResult: ImportResult | undefined = options.trackResults ? {
+    const detailedResult: ImportResult = {
         timestamp: new Date().toISOString(),
         totalRecords: records.length,
         clientsCreated: [],
@@ -68,7 +35,7 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         patientsCreated: [],
         patientsSkipped: [],
         patientsFailed: []
-    } : undefined;
+    };
 
     let lastSuccessful = 0;
     let lastFailed = 0;
@@ -82,53 +49,34 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
             try {
                 const clientResponse = await createClient(clientInput, options);
                 client = clientResponse.createClient;
-                results.successfulClients++;
-
-                // Validate client response and track if requested
                 if (!isClient(client)) {
                     throw new Error(`Created client missing required fields: ${JSON.stringify(client)}`);
                 }
-
-                if (detailedResult) {
-                    detailedResult.clientsCreated.push({
-                        inputRecord: record,
-                        createdClient: client
-                    });
-                }
-            } catch (err) {
-                results.failedClients++;
-                results.failedClientsList.push({
-                    name: `${clientInput.givenName} ${clientInput.familyName}`,
-                    email: clientInput.email || ''
+                detailedResult.clientsCreated.push({
+                    inputRecord: record,
+                    createdClient: client
                 });
-
-                // Track detailed failure if requested
-                if (detailedResult) {
-                    detailedResult.clientsFailed.push({
-                        inputRecord: record,
-                        error: err instanceof Error ? err.message : String(err),
-                        timestamp: new Date().toISOString()
-                    });
-                }
+            } catch (err) {
+                detailedResult.clientsFailed.push({
+                    inputRecord: record,
+                    error: err instanceof Error ? err.message : String(err),
+                    timestamp: new Date().toISOString()
+                });
 
                 console.error(`Error creating client for ${clientInput.givenName} ${clientInput.familyName}:`, err);
                 continue;
             }
         } else {
-            results.skippedClients++;
             clientId = client.id;
 
             // Validate existing client and track if requested
             if (!isClient(client)) {
                 throw new Error(`Existing client missing required fields: ${JSON.stringify(client)}`);
             }
-
-            if (detailedResult) {
-                detailedResult.clientsSkipped.push({
-                    inputRecord: record,
-                    createdClient: client
-                });
-            }
+            detailedResult.clientsSkipped.push({
+                inputRecord: record,
+                createdClient: client
+            });
         }
         clientId = clientId || client.id;
 
@@ -137,59 +85,38 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
             try {
                 const patientResponse = await createPatient(clientId, patientInput, options);
                 patient = patientResponse.createPatient;
-                results.successfulPatients++;
 
                 // Validate patient response and track if requested
                 if (!isPatient(patient)) {
                     throw new Error(`Created patient missing required fields: ${JSON.stringify(patient)}`);
                 }
-
-                if (detailedResult) {
-                    detailedResult.patientsCreated.push({
-                        inputRecord: record,
-                        createdPatient: patient
-                    });
-                }
-            } catch (err) {
-                results.failedPatients++;
-                results.failedPatientsList.push({
-                    pet: `${patientInput.name} (${clientInput.email || ''})`,
-                    clientEmail: clientInput.email || ''
+                detailedResult.patientsCreated.push({
+                    inputRecord: record,
+                    createdPatient: patient
                 });
-
-                // Track detailed failure if requested
-                if (detailedResult) {
-                    detailedResult.patientsFailed.push({
-                        inputRecord: record,
-                        error: err instanceof Error ? err.message : String(err),
-                        timestamp: new Date().toISOString()
-                    });
-                }
+            } catch (err) {
+                detailedResult.patientsFailed.push({
+                    inputRecord: record,
+                    error: err instanceof Error ? err.message : String(err),
+                    timestamp: new Date().toISOString()
+                });
 
                 console.error(`Error creating patient ${patientInput.name} for client ${clientInput.givenName} ${clientInput.familyName}:`, err);
                 continue;
             }
         } else {
-            results.skippedPatients++;
-
-            // Validate existing patient and track if requested
-            if (!isPatient(patient)) {
-                throw new Error(`Existing patient missing required fields: ${JSON.stringify(patient)}`);
-            }
-
-            if (detailedResult) {
-                detailedResult.patientsSkipped.push({
-                    inputRecord: record,
-                    createdPatient: patient
-                });
-            }
+            detailedResult.patientsSkipped.push({
+                inputRecord: record,
+                createdPatient: patient
+            });
         }
 
         // Emit progress every 10 records
         if ((i + 1) % 10 === 0 || i === records.length - 1) {
-            const totalSuccessful = results.successfulClients + results.successfulPatients;
-            const totalFailed = results.failedClients + results.failedPatients;
-            const totalSkipped = results.skippedClients + results.skippedPatients;
+
+            const totalSuccessful = detailedResult.clientsCreated.length + detailedResult.patientsCreated.length;
+            const totalFailed = detailedResult.clientsFailed.length + detailedResult.patientsFailed.length;
+            const totalSkipped = detailedResult.clientsSkipped.length + detailedResult.patientsSkipped.length;
             console.log(`Progress: Processed ${i + 1} of ${records.length} records. ${totalSuccessful} (+${totalSuccessful - lastSuccessful}) successful, ${totalFailed} failed (+${totalFailed - lastFailed}), ${totalSkipped} skipped (+${totalSkipped - lastSkipped}).`);
 
             lastSuccessful = totalSuccessful;
@@ -199,27 +126,29 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     }
 
     console.log('\nIdempotent Import Summary:');
-    console.log(`Successfully created clients: ${results.successfulClients}`);
-    console.log(`Successfully created patients: ${results.successfulPatients}`);
-    console.log(`Failed to create clients: ${results.failedClients}`);
-    console.log(`Failed to create patients: ${results.failedPatients}`);
-    console.log(`Skipped existing clients: ${results.skippedClients}`);
-    console.log(`Skipped existing patients: ${results.skippedPatients}`);
-    if (results.failedClientsList.length > 0) {
+    console.log(`Successfully created clients: ${detailedResult.clientsCreated.length}`);
+    console.log(`Successfully created patients: ${detailedResult.patientsCreated.length}`);
+    console.log(`Failed to create clients: ${detailedResult.clientsFailed.length}`);
+    console.log(`Failed to create patients: ${detailedResult.patientsFailed.length}`);
+    console.log(`Skipped existing clients: ${detailedResult.clientsSkipped.length}`);
+    console.log(`Skipped existing patients: ${detailedResult.patientsSkipped.length}`);
+    if (detailedResult.clientsFailed.length > 0) {
         console.log('Failed to create clients:');
-        results.failedClientsList.forEach(c => {
-            console.log(`- ${c.name} (${c.email})`);
+        detailedResult.clientsFailed.forEach(c => {
+            const { clientFirstName, clientLastName, clientEmail } = c.inputRecord;
+            console.log(`- ${clientFirstName} ${clientLastName} (${clientEmail})`);
         });
     }
-    if (results.failedPatientsList.length > 0) {
+    if (detailedResult.patientsFailed.length > 0) {
         console.log('Failed to create patients:');
-        results.failedPatientsList.forEach(p => {
-            console.log(`- ${p.pet}`);
+        detailedResult.patientsFailed.forEach(p => {
+            const { patientName, clientFirstName, clientLastName } = p.inputRecord;
+            console.log(`- ${patientName} (${clientFirstName} ${clientLastName})`);
         });
     }
 
     // Generate JSON files if detailed tracking is enabled
-    if (detailedResult && options.trackResults) {
+    if (options.trackResults) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const runType = options.sendApiRequests ? 'full' : 'dry';
         const location = 'real';

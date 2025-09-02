@@ -17,12 +17,6 @@ async function main() {
             description: 'Actually send API requests (not a dry run)',
             default: false
         })
-        .option('uptown', {
-            alias: 'u',
-            type: 'boolean',
-            description: 'Send to Uptown Vets (real location) instead of test location',
-            default: false
-        })
         .option('limit', {
             alias: 'l',
             type: 'number',
