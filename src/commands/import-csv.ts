@@ -44,10 +44,8 @@ async function main() {
         .strict(false)
         .parserConfiguration({ 'populate--': true })
         .help()
-        .example('$0 data.csv', 'Dry run import from data.csv (test location)')
-        .example('$0 --full-send =ata.csv', 'Actually import data from data.csv (test location)')
-        .example('$0 --uptown data.csv', 'Dry run to Uptown Vets (real location)')
-        .example('$0 --full-send --uptown data.csv', 'Actually import to Uptown Vets')
+        .example('$0 data.csv', 'Dry run import from data.csv')
+        .example('$0 --full-send data.csv', 'Actually import data from data.csv')
         .example('$0 --limit 10 data.csv', 'Dry run first 10 records only')
         .example('$0 data.csv --limit 10', 'Options can be placed before or after the CSV file')
         .argv;
@@ -66,9 +64,13 @@ async function main() {
         }
 
 
+        if (!process.env.REAL_LOCATION_ID) {
+            console.error('Missing required environment variable: REAL_LOCATION_ID');
+            process.exit(1);
+        }
+
         const options = {
             sendApiRequests: argv['full-send'] as boolean,
-            useRealLocation: argv.uptown as boolean,
             verbose: argv.verbose as boolean,
             trackResults: argv['track-results'] as boolean
         };

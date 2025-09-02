@@ -27,9 +27,13 @@ async function main() {
         .help()
         .argv;
 
+    if (!process.env.REAL_LOCATION_ID) {
+        console.error('Missing required environment variable: REAL_LOCATION_ID');
+        process.exit(1);
+    }
+
     const options: ImportOptions = {
         sendApiRequests: argv['full-send'] as boolean,
-        useRealLocation: argv.uptown as boolean,
         verbose: argv.verbose as boolean
     };
 

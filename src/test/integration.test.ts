@@ -55,6 +55,7 @@ describe('PDF to CSV Integration', async () => {
     // Expect at least header + one data row
     expect(lines.length).toBeGreaterThanOrEqual(2);
     expect(lines[0]).toContain('patientId,patientName');
+    fs.unlinkSync(csvPath);
   });
 
   it('should generate timestamped CSV filenames', async () => {
@@ -69,25 +70,11 @@ describe('PDF to CSV Integration', async () => {
     expect(csvPath1).toMatch(/client-patient-records_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/);
     expect(csvPath2).toMatch(/client-patient-records_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/);
     expect(csvPath1).not.toBe(csvPath2);
+    fs.unlinkSync(csvPath1);
+    fs.unlinkSync(csvPath2);
   });
 });
 
-afterAll(() => {
-  if (noCleanup) {
-    console.log('Skipping test cleanup because --no-cleanup was provided');
-    return;
-  }
-  for (const p of createdFiles) {
-    try {
-      if (fs.existsSync(p)) {
-        fs.unlinkSync(p);
-        console.log('Deleted test output:', p);
-      }
-    } catch (err) {
-      console.warn('Failed to delete test output:', p, err);
-    }
-  }
-});
 
 describe('Actual PDF Parsing Validation', () => {
   it('should parse the first 10 patient names correctly from actual PDF', async () => {

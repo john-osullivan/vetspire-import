@@ -14,6 +14,7 @@ const filePrefix = 'client-patient-records_';
 const createdFiles: string[] = [];
 
 // Honor a --no-cleanup flag passed to the test runner or NO_CLEANUP=1 env var
+console.log('process.argv: ', process.argv);
 const noCleanup = process.argv.includes('--no-cleanup') || process.env.NO_CLEANUP === '1';
 
 const EXPECTED_RESULTS: ClientImportRow[] = [
@@ -65,6 +66,7 @@ describe('convert-pdf CLI (integration)', () => {
             console.warn('Skipping test: sample PDF not found at', sourcePdf);
             return;
         }
+        await new Promise((resolve) => setTimeout(resolve, 5000));
 
         // Ensure outputs dir exists
         if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
@@ -75,9 +77,8 @@ describe('convert-pdf CLI (integration)', () => {
         const cmd = `npm run convert-pdf -- ${sourcePdf}`;
 
         const { stdout, stderr } = await exec(cmd, { timeout: 120_000 });
-        // Helpful logs for debugging failures
-        // console.log('convert-pdf stdout:', stdout);
-        // console.error('convert-pdf stderr:', stderr);
+        console.log('convert-pdf stdout:', stdout);
+        console.error('convert-pdf stderr:', stderr);
 
         const after = fs.readdirSync(outputsDir);
         const newFiles = after.filter(f => !before.has(f) && f.startsWith(filePrefix));
@@ -98,6 +99,7 @@ describe('convert-pdf CLI (integration)', () => {
 
         // Verify that when the CSV is read back in as ClientInputRows, the complete
         // array includes our EXPECTED_RESULTS somewhere.
+        console.log('Reading CSV file:', path.join(outputsDir, newFiles[0]));
         const importedRows = readCsvFile(path.join(outputsDir, newFiles[0]));
         for (const expected of EXPECTED_RESULTS) {
             // Search by first and last name from our EXPECTED_RESULTS to see if
@@ -107,7 +109,7 @@ describe('convert-pdf CLI (integration)', () => {
                 row.clientLastName === expected.clientLastName &&
                 row.patientName === expected.patientName
             );
-            expectToBeDefined(found);
+            expectToBeDefined(found, `Could not find expected record for ${expected.clientFirstName} ${expected.clientLastName} (${expected.patientName})`);
 
             // For each of those records, check that every one of our expected keys
             // matches the real value
@@ -121,17 +123,17 @@ describe('convert-pdf CLI (integration)', () => {
 });
 
 afterAll(() => {
-    if (noCleanup) {
-        console.log('Skipping test cleanup because --no-cleanup was provided');
-        return;
-    }
-    for (const p of createdFiles) {
-        try {
-            if (fs.existsSync(p)) {
-                fs.unlinkSync(p);
-            }
-        } catch (err) {
-            console.warn('Failed to delete test artifact:', p, err);
-        }
-    }
+    // if (noCleanup) {
+    //     console.log('Skipping test cleanup because --no-cleanup was provided');
+    //     return;
+    // }
+    // for (const p of createdFiles) {
+    //     try {
+    //         if (fs.existsSync(p)) {
+    //             fs.unlinkSync(p);
+    //         }
+    //     } catch (err) {
+    //         console.warn('Failed to delete test artifact:', p, err);
+    //     }
+    // }
 });

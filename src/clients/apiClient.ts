@@ -76,14 +76,12 @@ async function graphqlRequest<T>(query: string, variables?: unknown): Promise<T>
 export async function createClient(input: ClientInput, options: ImportOptions = {}): Promise<ClientResponse> {
   await rateLimit();
   const query = CREATE_CLIENT_MUTATION;
-
-  // Set the primary location ID based on the mode
-  const locationId = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
-  const inputWithLocation = { ...input, primaryLocationId: locationId };
+  // Always set primaryLocationId to the REAL_LOCATION_ID
+  if (!process.env.REAL_LOCATION_ID) throw new Error('REAL_LOCATION_ID is required');
+  const inputWithLocation = { ...input, primaryLocationId: process.env.REAL_LOCATION_ID };
 
   if (!options.sendApiRequests) {
-    const locationDesc = options.useRealLocation ? 'REAL' : 'TEST';
-    console.log(`DRY RUN - Would send createClient mutation with ${locationDesc} location (${locationId}):`, JSON.stringify(inputWithLocation, null, 2));
+    console.log(`DRY RUN - Would send createClient mutation with REAL location (${process.env.REAL_LOCATION_ID}):`, JSON.stringify(inputWithLocation, null, 2));
     return { createClient: { id: 'dry-run-client-id', givenName: input.givenName, familyName: input.familyName } };
   }
 
@@ -95,8 +93,7 @@ export async function createPatient(clientId: string, input: PatientInput, optio
   const query = CREATE_PATIENT_MUTATION;
 
   if (!options.sendApiRequests) {
-    const locationDesc = options.useRealLocation ? 'REAL' : 'TEST';
-    console.log(`DRY RUN - Would send createPatient mutation with clientId: ${clientId} and input:`, JSON.stringify(input, null, 2));
+    console.log(`DRY RUN - Would send createPatient mutation for clientId: ${clientId} with REAL location (${process.env.REAL_LOCATION_ID}):`, JSON.stringify(input, null, 2));
     return { createPatient: { id: 'dry-run-patient-id', name: input.name, species: input.species } };
   }
 

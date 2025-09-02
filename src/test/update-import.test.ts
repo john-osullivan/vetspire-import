@@ -3,7 +3,7 @@ import { updateImportedPrimaryLocations } from '../services/importer.js';
 
 describe('update-import integration (dry run)', () => {
   it('runs in dry-run mode and returns a result object', async () => {
-    const result = await updateImportedPrimaryLocations({ sendApiRequests: false, useRealLocation: false, verbose: false });
+    const result = await updateImportedPrimaryLocations({ sendApiRequests: false, verbose: false });
     expect(result).toBeDefined();
     const asRecord = result as Record<string, unknown>;
     expect(typeof asRecord.updatedClients === 'number' || typeof asRecord.updatedClients === 'undefined').toBe(true);

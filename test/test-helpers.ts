@@ -2,7 +2,8 @@ import { expect } from "vitest";
 
 
 export function expectToBeDefined<T>(
-    value: T | undefined
+    value: T | undefined,
+    message: string
 ): asserts value is T {
-    expect(value).toBeDefined();
+    expect(value, message).toBeDefined();
 }

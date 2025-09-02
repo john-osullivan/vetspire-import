@@ -222,7 +222,7 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     if (detailedResult && options.trackResults) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const runType = options.sendApiRequests ? 'full' : 'dry';
-        const location = options.useRealLocation ? 'uptown' : 'test';
+        const location = 'real';
         const outputDir = path.resolve(process.cwd(), 'outputs');
 
         // Ensure outputs directory exists
@@ -285,7 +285,8 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
         const isPlaceholder = typeof currentLocation === 'string' && (currentLocation === 'TEST_LOCATION' || currentLocation.length < 10);
         if (!isPlaceholder) continue;
 
-        const targetLocation = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
+        if (!process.env.REAL_LOCATION_ID) throw new Error('REAL_LOCATION_ID is required');
+        const targetLocation = process.env.REAL_LOCATION_ID;
 
         try {
             await updateClient(client.id, { primaryLocationId: targetLocation }, options);
@@ -303,7 +304,8 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
         const isPlaceholder = typeof currentLocation === 'string' && (currentLocation === 'TEST_LOCATION' || currentLocation.length < 10);
         if (!isPlaceholder) continue;
 
-        const targetLocation = options.useRealLocation ? process.env.REAL_LOCATION_ID : process.env.TEST_LOCATION_ID;
+        if (!process.env.REAL_LOCATION_ID) throw new Error('REAL_LOCATION_ID is required');
+        const targetLocation = process.env.REAL_LOCATION_ID;
 
         try {
             await updatePatient(patient.id, { primaryLocationId: targetLocation }, options);
