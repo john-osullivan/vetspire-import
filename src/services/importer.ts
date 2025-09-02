@@ -69,7 +69,6 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         } else {
             clientId = client.id;
 
-            // Validate existing client and track if requested
             if (!isClient(client)) {
                 throw new Error(`Existing client missing required fields: ${JSON.stringify(client)}`);
             }
