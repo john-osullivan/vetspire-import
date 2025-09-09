@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { ClientInput, PatientInput, ClientResponse, PatientResponse, Patient } from '../types/apiTypes';
+import { ClientInput, PatientInput, ClientResponse, PatientResponse, Patient, ImmunizationDraft, ImmunizationResponse } from '../types/apiTypes';
 import { ImportOptions } from '../types/importOptions';
 import { rateLimit } from '../services/rateLimiter';
 import { CREATE_CLIENT_MUTATION } from './graphql/createClient.gql';
@@ -8,6 +8,7 @@ import { GET_CLIENTS_QUERY } from './graphql/getClients.gql';
 import { GET_PATIENTS_QUERY } from './graphql/getPatients.gql';
 import { UPDATE_CLIENT_MUTATION } from './graphql/updateClient.gql';
 import { UPDATE_PATIENT_MUTATION } from './graphql/updatePatient.gql';
+import { CREATE_IMMUNIZATION_MUTATION } from './graphql/createImmunization.gql';
 
 config();
 
@@ -285,6 +286,25 @@ export async function updateClient(id: string, input: Partial<ClientInput>, opti
   }
 
   return await graphqlRequest(query, { id, input, __verbose: options.verbose });
+}
+
+export async function createImmunization(input: ImmunizationDraft, options: ImportOptions = {}): Promise<ImmunizationResponse> {
+  await rateLimit();
+  const query = CREATE_IMMUNIZATION_MUTATION;
+
+  const locationId = process.env.REAL_LOCATION_ID;
+  const providerId = process.env.PROVIDER_ID;
+  if (!locationId) throw new Error('REAL_LOCATION_ID is required');
+  if (!providerId) throw new Error('PROVIDER_ID is required');
+
+  const finalInput = { ...input, locationId, providerId };
+
+  if (!options.sendApiRequests) {
+    console.log('DRY RUN - Would send createImmunization with input:', JSON.stringify(finalInput, null, 2));
+    return { createImmunization: { id: 'dry-run-immunization-id', ...finalInput } } as ImmunizationResponse;
+  }
+
+  return await graphqlRequest<ImmunizationResponse>(query, { input: finalInput, __verbose: options.verbose });
 }
 
 export async function updatePatient(id: string, input: Partial<PatientInput>, options: ImportOptions = {}) {

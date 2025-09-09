@@ -9,6 +9,8 @@ query GetPatients($limit: Int, $offset: Int) {
     breed
     client {
       id
+      givenName
+      familyName
       email
       primaryLocationId
     }

@@ -18,6 +18,9 @@ interface BaseEntity {
   updatedAt?: NaiveDateTime;
 }
 
+// Utility types
+export type RequireKeys<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
+
 // Shared input structures
 export interface AddressInput {
   line1?: string;
@@ -257,6 +260,79 @@ export interface ClientsQuery {
 
 export interface ClientTagQuery {
   id: ID;
+}
+
+// IMMUNIZATION TYPES
+export type ImmunizationStatus = 'ACTIVE' | 'COMPLETED' | 'DECLINED' | 'ENTERED_IN_ERROR' | 'PENDING';
+export type ImmunizationType = 'BOOSTER' | 'INITIAL';
+export type RouteType =
+  | 'DROPS' | 'INJECTABLE' | 'INTRAMUSCULAR' | 'INTRANASAL' | 'INTRAVENOUSLY'
+  | 'OINTMENT' | 'ORAL' | 'SUBCUTANEOUS' | 'TOPICAL' | 'TRANSDERMAL';
+
+export interface ImmunizationInput {
+  administered?: boolean;
+  date?: Date;
+  dueDate?: Date;
+  declined?: boolean;
+  doseQuantity?: string;
+  encounterId?: ID;
+  expiryDate?: Date;
+  historical?: boolean;
+  immunizationStatus?: ImmunizationStatus;
+  isRabies?: boolean;
+  locationId?: ID;
+  lotNumber?: string;
+  manufacturer?: string;
+  name?: string;
+  patientId?: ID;
+  providerId?: ID;
+  route?: RouteType;
+  site?: string;
+  technicianId?: ID;
+  immunizationType?: ImmunizationType;
+}
+
+// Stronger draft type used by our importer for creation
+export type ImmunizationDraft = RequireKeys<
+  ImmunizationInput,
+  | 'administered'
+  | 'date'
+  | 'declined'
+  | 'expiryDate'
+  | 'historical'
+  | 'immunizationStatus'
+  | 'isRabies'
+  | 'lotNumber'
+  | 'manufacturer'
+  | 'name'
+  | 'patientId'
+  | 'route'
+  | 'site'
+  | 'immunizationType'
+>;
+
+export interface Immunization extends BaseEntity {
+  name?: string;
+  patientId?: ID;
+  date?: Date;
+  dueDate?: Date;
+  administered?: boolean;
+  declined?: boolean;
+  historical?: boolean;
+  immunizationStatus?: ImmunizationStatus;
+  immunizationType?: ImmunizationType;
+  route?: RouteType;
+  site?: string;
+  lotNumber?: string;
+  manufacturer?: string;
+  expiryDate?: Date;
+  isRabies?: boolean;
+  locationId?: ID;
+  providerId?: ID;
+}
+
+export interface ImmunizationResponse {
+  createImmunization: Immunization;
 }
 
 // MUTATION RESPONSE TYPES

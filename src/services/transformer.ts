@@ -1,4 +1,6 @@
 import { ClientImportRow, ClientInput, PatientInput, AddressInput, PhoneNumberInput, Sex } from '../types';
+import { ImmunizationDraft, ImmunizationStatus, ImmunizationType, RouteType } from '../types';
+import { VaccineDeliveryRow, normalizeMmDdYyyy } from './pdfParser.js';
 
 /**
  * Check if field contains actual data (not empty, placeholder, or corrupted)
@@ -204,4 +206,60 @@ export function transformInputRow(row: ClientImportRow): {
     };
 
     return { client, patient, metadata };
+}
+
+// ============================
+// Immunization transformation
+// ============================
+
+export function isFutureDate(dateLike?: string): boolean {
+    if (!dateLike) return false;
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(dateLike) ? dateLike : (normalizeMmDdYyyy(dateLike) ?? '');
+    if (!iso) return false;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return iso > todayIso;
+}
+
+const boosterPatterns: RegExp[] = [
+    /#\s*2\b/i,
+    /#\s*3\b/i,
+    /\b2nd\b/i,
+    /\b3rd\b/i,
+];
+
+export function detectImmunizationType(description: string): ImmunizationType {
+    for (const pat of boosterPatterns) {
+        if (pat.test(description)) return 'BOOSTER';
+    }
+    return 'INITIAL';
+}
+
+export function detectRoute(description: string): RouteType {
+    return /intranasal/i.test(description) ? 'INTRANASAL' : 'SUBCUTANEOUS';
+}
+
+export function detectRabies(description: string): boolean {
+    return /rabies/i.test(description);
+}
+
+export function toImmunizationDraft(row: VaccineDeliveryRow, patientId: string): ImmunizationDraft {
+    const status: ImmunizationStatus = isFutureDate(row.dateDue) ? 'ACTIVE' : 'COMPLETED';
+
+    return {
+        administered: true,
+        date: row.dateGiven,
+        dueDate: row.dateDue,
+        declined: false,
+        expiryDate: row.expiryDate,
+        historical: true,
+        immunizationStatus: status,
+        isRabies: detectRabies(row.description),
+        lotNumber: row.lotNumber,
+        manufacturer: row.manufacturer,
+        name: row.description,
+        patientId,
+        route: detectRoute(row.description),
+        site: 'Unknown (Legacy)',
+        immunizationType: detectImmunizationType(row.description),
+    };
 }

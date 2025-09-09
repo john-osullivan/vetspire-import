@@ -2,7 +2,7 @@ import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
 import { createClient, createPatient, fetchAllExistingRecords, findClientMatch, findPatientMatch, updateClient, updatePatient } from "../clients/apiClient.js";
 import { Client, ClientInput, Patient } from '../types/apiTypes';
-import { ImportOptions, ImportResult, deepEqual } from "../types/importOptions";
+import { ImportOptions, ImportResult, deepEqual } from "../types/importOptions.js";
 import { isClient, isPatient } from "./typeGuards.js";
 import fs from 'fs';
 import path from 'path';
@@ -300,3 +300,5 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
     console.log(`Update complete. Clients updated: ${updatedClients}, Patients updated: ${updatedPatients}`);
     return { updatedClients, updatedPatients };
 }
+
+// Immunization helpers moved to src/services/immunizationLookup.ts to avoid heavy imports in ESM runtime

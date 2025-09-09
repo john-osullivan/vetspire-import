@@ -1,5 +1,0 @@
-When we ran the import command, we covered a large collection of clients and patients, but there were some clients where the creation call threw an error, and the import failed.
-
-I need to focus in on those particular clients and start a workflow to remediate each of them. Those clients might have multiple patients, so every row from the input that causes a failure needs to exist in this new output we're producing called failed imports.json. This JSON needs to have every time a call fails, we need to add a new record to our failed imports. So a client might appear more than once if they had more than one patient. Once you've built out this JSON, I can start identifying patterns in the failures.
-
-Please lay out a strategy for how you might implement this. I'm going to call my output as a parameter on the regular import command. The syntax I'm looking for is that when I pass a flag, it produces output files (one success, one failure) and this is not output describing the CSV that was made, but rather an output JSON showing what records were created.

@@ -6,6 +6,8 @@ import path from 'path';
 import { ClientImportRow } from '../src/types';
 import { readCsvFile } from '../src/services/csvHandler';
 import { expectToBeDefined } from './test-helpers';
+import { extractTextFromPdf } from '../src/clients/pdfClient';
+import { parseVaccineLots, parseVaccineRecords, writeVaccineRowsToJSON } from '../src/services/pdfParser';
 
 const exec = promisify(_exec);
 const outputsDir = path.resolve('./outputs');
@@ -136,4 +138,86 @@ afterAll(() => {
     //         console.warn('Failed to delete test artifact:', p, err);
     //     }
     // }
+});
+
+// Additional integration tests for vaccine_export.pdf parsing
+describe.only('Vaccine PDF Parsing (integration)', () => {
+    const vaccinePdf = path.resolve('./vaccine_export.pdf');
+    const outputsDir = path.resolve('./outputs');
+
+    it('parses the first two lot groups from the sample PDF', async () => {
+        if (!fs.existsSync(vaccinePdf)) {
+            console.warn('Skipping test: vaccine_export.pdf not found at', vaccinePdf);
+            return;
+        }
+
+        const text = await extractTextFromPdf(vaccinePdf);
+        const lots = parseVaccineLots(text);
+        expect(lots.length).toBeGreaterThan(0);
+
+        // First lot is the error batch (empty lot/manufacturer)
+        expect(lots[0]).toEqual({ lotNumber: '', manufacturer: '', expiryDate: '' });
+        // Second lot
+        expect(lots[1].lotNumber).toBe('01211821C');
+        expect(lots[1].manufacturer.toLowerCase()).toContain('intervet');
+    }, 60_000);
+
+    it('verifies five rows in second lot with expected dates', async () => {
+        if (!fs.existsSync(vaccinePdf)) return;
+
+        const text = await extractTextFromPdf(vaccinePdf);
+        const lots = parseVaccineLots(text);
+        const rows = parseVaccineRecords(text);
+        expect(lots.length).toBeGreaterThan(1);
+        const lot2 = lots[1];
+        const lot2Rows = rows.filter(r => r.lotNumber === lot2.lotNumber);
+        expect(lot2Rows.length).toBeGreaterThanOrEqual(5);
+
+        const expected = [
+            { patient: 'Frankie', family: 'Rodriguez', given: 'Christian', dateGiven: '2019-12-07', dateDue: '2020-12-06' },
+            { patient: 'Archie', family: 'Naylor', given: 'Madigan', dateGiven: '2019-11-19', dateDue: '2020-11-18' },
+            { patient: 'Gaspard', family: 'Murphy', given: 'Sara', dateGiven: '2019-11-12', dateDue: '2020-11-11' },
+            { patient: 'Toby', family: 'Francus', given: 'Helena', dateGiven: '2019-12-10', dateDue: '2020-12-09' },
+            { patient: 'Oscar', family: 'Feuer', given: 'Lindsay', dateGiven: '2019-12-07', dateDue: '2020-12-06' },
+        ];
+
+        for (const e of expected) {
+            const m = lot2Rows.find(r =>
+                r.patientName === e.patient &&
+                r.clientFamilyName === e.family &&
+                r.clientGivenName === e.given
+            );
+            expect(m, `Missing expected row for ${e.patient} (${e.family}, ${e.given})`).toBeDefined();
+            if (m) {
+                expect(m.description.toLowerCase()).toContain('da2/cpv');
+                expect(m.dateGiven).toBe(e.dateGiven);
+                expect(m.dateDue).toBe(e.dateDue);
+            }
+        }
+    }, 60_000);
+
+    it('parses rows and writes JSON output', async () => {
+        if (!fs.existsSync(vaccinePdf)) return;
+
+        const text = await extractTextFromPdf(vaccinePdf);
+        const rows = parseVaccineRecords(text);
+        expect(rows.length).toBeGreaterThan(0);
+
+        // Spot-check a couple of recognizable entries
+        const daisy = rows.find(r => r.patientName === 'Daisy' && r.clientFamilyName === 'Smith' && r.clientGivenName === 'Gina');
+        expect(daisy).toBeDefined();
+        if (daisy) {
+            expect(daisy.description.toLowerCase()).toContain('lymes');
+            expect(daisy.dateGiven <= (daisy.dateDue || daisy.dateGiven)).toBe(true);
+        }
+
+        const lucky = rows.find(r => r.patientName === 'Lucky' && r.clientFamilyName === 'Mena' && r.clientGivenName === 'Brianna');
+        expect(lucky).toBeDefined();
+        if (lucky) {
+            expect(lucky.description.toLowerCase()).toContain('intranasal');
+        }
+
+        const jsonPath = writeVaccineRowsToJSON(rows, outputsDir);
+        expect(fs.existsSync(jsonPath)).toBe(true);
+    }, 60_000);
 });
