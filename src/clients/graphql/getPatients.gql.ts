@@ -1,36 +1,38 @@
 export const GET_PATIENTS_QUERY = `
 query GetPatients($limit: Int, $offset: Int) {
   patients(limit: $limit, offset: $offset) {
-    id
-    name
-    species
-    breed
-    sex
-    sexTerm
-    birthDate
-    birthYear
-    birthMonth
-    birthDay
     age
-    isEstimatedAge
-    microchip
-    microchipRegistered
-    neutered
-    neuterDate
-    isDeceased
-    deceasedDate
-    goalWeight
-    isEstimatedWeight
-    profileImageUrl
-    historicalId
-    privateNotes
-    verifiedAt
-    lastSyncedAt
+    birthDate
+    birthDay
+    birthMonth
+    birthYear
+    breed
     client {
       id
       email
       primaryLocationId
     }
+    color
+    deceasedDate
+    goalWeight
+    historicalId
+    id
+    isActive
+    isDeceased
+    isEstimatedAge
+    isEstimatedWeight
+    lastSyncedAt
+    microchip
+    microchipRegistered
+    name
+    neuterDate
+    neutered
+    privateNotes
+    profileImageUrl
+    sex
+    sexTerm
+    species
+    verifiedAt
   }
 }
 `;

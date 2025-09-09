@@ -100,101 +100,6 @@ function buildAddress(row: ClientImportRow): AddressInput | undefined {
     return hasData ? address as AddressInput : undefined;
 }
 
-/**
- * Transform to ClientInput using table-driven field mapping
- */
-export function transformToClientInput(row: ClientImportRow): ClientInput {
-    // Client field mappings
-    const CLIENT_FIELDS = [
-        { from: 'clientFirstName' as keyof ClientImportRow, to: 'givenName' as keyof ClientInput },
-        { from: 'clientLastName' as keyof ClientImportRow, to: 'familyName' as keyof ClientInput },
-        { from: 'clientEmail' as keyof ClientImportRow, to: 'email' as keyof ClientInput },
-    ] as const;
-
-    const client: Partial<ClientInput> = {};
-
-    // Map basic fields using table
-    for (const field of CLIENT_FIELDS) {
-        if (hasValue(row[field.from], field.from)) {
-            // @ts-ignore compiler dumb
-            client[field.to] = row[field.from]!;
-        }
-    }
-
-    // Handle address - include any partial data
-    const addresses: AddressInput[] = [];
-    const address = buildAddress(row);
-    if (address) {
-        addresses.push(address);
-    }
-
-    // Handle phone
-    const phoneNumbers: PhoneNumberInput[] = [];
-    if (hasValue(row.clientPhone, 'clientPhone')) {
-        phoneNumbers.push({ value: row.clientPhone! });
-    }
-
-    return {
-        givenName: client.givenName || '',
-        familyName: client.familyName || '',
-        email: client.email || '',
-        addresses,
-        phoneNumbers,
-        notes: 'Imported from legacy system',
-        isActive: true,
-        historicalId: hasValue(row.clientId) ? row.clientId! : undefined,
-    };
-}
-
-/**
- * Transform to PatientInput using table-driven field mapping
- */
-export function transformToPatientInput(row: ClientImportRow): PatientInput {
-    // Patient field mappings
-    const PATIENT_FIELDS = [
-        { from: 'patientName' as keyof ClientImportRow, to: 'name' as keyof PatientInput },
-        { from: 'patientSpecies' as keyof ClientImportRow, to: 'species' as keyof PatientInput },
-        { from: 'patientBreed' as keyof ClientImportRow, to: 'breed' as keyof PatientInput },
-        { from: 'patientColor' as keyof ClientImportRow, to: 'color' as keyof PatientInput },
-    ] as const;
-
-    const patient: Partial<PatientInput> = {};
-
-    // Map basic fields using table
-    for (const field of PATIENT_FIELDS) {
-        if (hasValue(row[field.from], field.from)) {
-            // @ts-ignore compiler dumb
-            patient[field.to] = row[field.from]!;
-        }
-    }
-
-    const { sex, neutered } = parseSexAndNeutered(row.patientSexSpay);
-    const goalWeight = parseWeight(row.patientWeight);
-    const birthDate = parseDate(row.patientDOB);
-    const isDeceased = isPatientDeceased(row.patientStatus);
-
-    // Map internal sex values to Vetspire GraphQL enum values
-    let sexEnum: 'MALE' | 'FEMALE' | 'UNKNOWN';
-    if (sex === 'MALE') sexEnum = 'MALE';
-    else if (sex === 'FEMALE') sexEnum = 'FEMALE';
-    else sexEnum = 'UNKNOWN';
-
-    return {
-        name: patient.name || '',
-        species: patient.species || '',
-        breed: patient.breed || '',
-        color: patient.color,
-        sex: sexEnum,
-        neutered,
-        goalWeight,
-        birthDate,
-        isDeceased,
-        isEstimatedAge: !birthDate,
-        isEstimatedWeight: !!goalWeight,
-        isActive: !isDeceased,
-        historicalId: hasValue(row.patientId) ? row.patientId! : undefined,
-    };
-}
 
 // Metadata type for transformation results
 export interface TransformationMetadata {
@@ -239,7 +144,6 @@ export function transformInputRow(row: ClientImportRow): {
     }
 
     const { sex, neutered } = parseSexAndNeutered(row.patientSexSpay);
-    const goalWeight = parseWeight(row.patientWeight);
     const birthDate = parseDate(row.patientDOB);
     const isDeceased = isPatientDeceased(row.patientStatus);
 
@@ -250,14 +154,14 @@ export function transformInputRow(row: ClientImportRow): {
         color: patientData.color,
         sex,
         neutered,
-        goalWeight,
         birthDate,
         isDeceased,
         isEstimatedAge: !birthDate,
-        isEstimatedWeight: !!goalWeight,
+        isEstimatedWeight: !!row.patientWeight,
         isActive: !isDeceased,
         historicalId: hasValue(row.patientId) ? row.patientId! : undefined,
     };
+    if (row.patientWeight) patient.goalWeight = row.patientWeight;
 
     // Build client with status depending on patient
     const clientData: Partial<ClientInput> = {};
@@ -287,7 +191,7 @@ export function transformInputRow(row: ClientImportRow): {
         phoneNumbers,
         notes: 'Imported from legacy system',
         isActive: !isDeceased, // Client inactive if their pet is deceased
-        historicalId: hasValue(row.clientId) ? row.clientId! : undefined,
+        historicalId: hasValue(row.clientId) ? `${row.clientId!}<primary-location-change-from:27830>` : undefined,
     };
 
     const metadata: TransformationMetadata = {

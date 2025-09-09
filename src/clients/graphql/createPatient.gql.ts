@@ -5,6 +5,7 @@ mutation CreatePatient($clientId: ID!, $input: PatientInput!) {
     name
     species
     breed
+    color
     sex
     sexTerm
     birthDate

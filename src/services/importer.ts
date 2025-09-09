@@ -1,8 +1,8 @@
 import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
 import { createClient, createPatient, fetchAllExistingRecords, findClientMatch, findPatientMatch, updateClient, updatePatient } from "../clients/apiClient.js";
-import { Client, Patient } from '../types/apiTypes';
-import { ImportOptions, ImportResult, ClientRecord, PatientRecord, ClientFailureRecord, PatientFailureRecord } from "../types/importOptions";
+import { Client, ClientInput, Patient } from '../types/apiTypes';
+import { ImportOptions, ImportResult, deepEqual } from "../types/importOptions";
 import { isClient, isPatient } from "./typeGuards.js";
 import fs from 'fs';
 import path from 'path';
@@ -14,17 +14,6 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     // Fetch all existing records from server
     const { clients: existingClients, patients: existingPatients } = await fetchAllExistingRecords(true);
 
-    const results = {
-        successfulClients: 0,
-        successfulPatients: 0,
-        failedClients: 0,
-        failedPatients: 0,
-        skippedClients: 0,
-        skippedPatients: 0,
-        failedClientsList: [] as { name: string; email: string }[],
-        failedPatientsList: [] as { pet: string; clientEmail: string }[]
-    };
-
     // Initialize detailed tracking if requested
     const detailedResult: ImportResult = {
         timestamp: new Date().toISOString(),
@@ -34,16 +23,20 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         clientsFailed: [],
         patientsCreated: [],
         patientsSkipped: [],
-        patientsFailed: []
+        patientsFailed: [],
+        clientsUpdated: [],
+        patientsUpdated: [],
     };
 
     let lastSuccessful = 0;
     let lastFailed = 0;
     let lastSkipped = 0;
+    let lastUpdated = 0;
     for (let i = 0; i < records.length; i++) {
         const record = records[i];
         const { client: clientInput, patient: patientInput, metadata } = transformInputRow(record);
         let client = findClientMatch(clientInput, existingClients)?.match;
+        let oldClient = client;
         let clientId;
         if (!client) {
             try {
@@ -53,12 +46,12 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
                     throw new Error(`Created client missing required fields: ${JSON.stringify(client)}`);
                 }
                 detailedResult.clientsCreated.push({
-                    inputRecord: record,
+                    inputRecord: clientInput,
                     createdClient: client
                 });
             } catch (err) {
                 detailedResult.clientsFailed.push({
-                    inputRecord: record,
+                    inputRecord: clientInput,
                     error: err instanceof Error ? err.message : String(err),
                     timestamp: new Date().toISOString()
                 });
@@ -72,14 +65,46 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
             if (!isClient(client)) {
                 throw new Error(`Existing client missing required fields: ${JSON.stringify(client)}`);
             }
-            detailedResult.clientsSkipped.push({
-                inputRecord: record,
-                createdClient: client
-            });
+
+            // @ts-ignore
+            if (!deepEqual(clientInput, client)) {
+                try {
+                    const { id: _, ...clientRest } = client;
+                    const newInput = { ...clientRest, ...clientInput }
+                    const clientResponse = await updateClient(clientId, newInput, options) as { updateClient: Client };
+                    oldClient = client;
+                    client = clientResponse.updateClient;
+                    if (!isClient(client)) {
+                        throw new Error(`Updated client missing required fields: ${JSON.stringify(client)}`);
+                    }
+                    detailedResult.clientsUpdated.push({
+                        inputRecord: clientInput,
+                        updatedClient: client,
+                        oldClient
+                    });
+                } catch (err) {
+                    detailedResult.clientsFailed.push({
+                        inputRecord: clientInput,
+                        error: err instanceof Error ? err.message : String(err),
+                        timestamp: new Date().toISOString()
+                    });
+
+                    console.error(`Error updating client for ${clientInput.givenName} ${clientInput.familyName}:`, err);
+                }
+            } else {
+                detailedResult.clientsSkipped.push({
+                    inputRecord: clientInput
+                });
+            }
         }
         clientId = clientId || client.id;
 
         let patient = findPatientMatch(patientInput, clientId, existingPatients)?.match;
+        let oldPatient = patient;
+        let patientFailure = {
+            ...patientInput,
+            email: clientInput.email || `${clientInput.givenName} ${clientInput.familyName}` as string
+        };
         if (!patient) {
             try {
                 const patientResponse = await createPatient(clientId, patientInput, options);
@@ -90,12 +115,12 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
                     throw new Error(`Created patient missing required fields: ${JSON.stringify(patient)}`);
                 }
                 detailedResult.patientsCreated.push({
-                    inputRecord: record,
+                    inputRecord: patientInput,
                     createdPatient: patient
                 });
             } catch (err) {
                 detailedResult.patientsFailed.push({
-                    inputRecord: record,
+                    inputRecord: patientFailure,
                     error: err instanceof Error ? err.message : String(err),
                     timestamp: new Date().toISOString()
                 });
@@ -104,10 +129,36 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
                 continue;
             }
         } else {
-            detailedResult.patientsSkipped.push({
-                inputRecord: record,
-                createdPatient: patient
-            });
+            if (!isPatient(patient)) {
+                throw new Error(`Existing patient missing required fields: ${JSON.stringify(patient)}`);
+            }
+
+            // @ts-ignore
+            if (!deepEqual(patientInput, patient)) {
+                try {
+                    const patientResponse = await updatePatient(patient.id, patientInput, options) as { updatePatient: Patient };
+                    patient = patientResponse.updatePatient;
+
+                    if (!isPatient(patient)) throw new Error(`Updated patient missing required fields: ${JSON.stringify(patient)}`);
+                    detailedResult.patientsUpdated.push({
+                        inputRecord: patientInput,
+                        updatedPatient: patient,
+                        oldPatient
+                    });
+                } catch (err) {
+                    detailedResult.patientsFailed.push({
+                        inputRecord: patientFailure,
+                        error: err instanceof Error ? err.message : String(err),
+                        timestamp: new Date().toISOString()
+                    });
+
+                    console.error(`Error updating patient ${patientInput.name} for client ${clientInput.givenName} ${clientInput.familyName}:`, err);
+                }
+            } else {
+                detailedResult.patientsSkipped.push({
+                    inputRecord: patientFailure
+                });
+            }
         }
 
         // Emit progress every 10 records
@@ -116,11 +167,13 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
             const totalSuccessful = detailedResult.clientsCreated.length + detailedResult.patientsCreated.length;
             const totalFailed = detailedResult.clientsFailed.length + detailedResult.patientsFailed.length;
             const totalSkipped = detailedResult.clientsSkipped.length + detailedResult.patientsSkipped.length;
-            console.log(`Progress: Processed ${i + 1} of ${records.length} records. ${totalSuccessful} (+${totalSuccessful - lastSuccessful}) successful, ${totalFailed} failed (+${totalFailed - lastFailed}), ${totalSkipped} skipped (+${totalSkipped - lastSkipped}).`);
+            const totalUpdated = detailedResult.clientsUpdated.length + detailedResult.patientsUpdated.length;
+            console.log(`Progress: Processed ${i + 1} of ${records.length} records. ${totalSuccessful} (+${totalSuccessful - lastSuccessful}) successful, ${totalFailed} failed (+${totalFailed - lastFailed}), ${totalUpdated} updated (+${totalUpdated - lastUpdated}), ${totalSkipped} skipped (+${totalSkipped - lastSkipped}).`);
 
             lastSuccessful = totalSuccessful;
             lastFailed = totalFailed;
             lastSkipped = totalSkipped;
+            lastUpdated = totalUpdated;
         }
     }
 
@@ -134,15 +187,15 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
     if (detailedResult.clientsFailed.length > 0) {
         console.log('Failed to create clients:');
         detailedResult.clientsFailed.forEach(c => {
-            const { clientFirstName, clientLastName, clientEmail } = c.inputRecord;
-            console.log(`- ${clientFirstName} ${clientLastName} (${clientEmail})`);
+            const { givenName, familyName, email } = c.inputRecord;
+            console.log(`- ${givenName} ${familyName} (${email})`);
         });
     }
     if (detailedResult.patientsFailed.length > 0) {
         console.log('Failed to create patients:');
         detailedResult.patientsFailed.forEach(p => {
-            const { patientName, clientFirstName, clientLastName } = p.inputRecord;
-            console.log(`- ${patientName} (${clientFirstName} ${clientLastName})`);
+            const { name, email } = p.inputRecord;
+            console.log(`- ${name} (${email})`);
         });
     }
 
@@ -176,7 +229,7 @@ export async function processAll(records: ClientImportRow[], options: ImportOpti
         console.log(`Failures-only output written to: ${failuresFile}`);
     }
 
-    return results;
+    return detailedResult;
 }
 
 /**

@@ -5,7 +5,7 @@ query GetClients($limit: Int, $offset: Int) {
     givenName
     familyName
     email
-  primaryLocationId
+    primaryLocationId
     historicalId
     isActive
   }

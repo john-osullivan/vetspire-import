@@ -137,7 +137,8 @@ export interface PatientBase {
   neuterDate?: Date;
   isDeceased?: boolean;
   deceasedDate?: Date;
-  goalWeight?: Decimal;
+  goalWeight?: string;
+  latestWeight?: string;
   isEstimatedWeight?: boolean;
   profileImageUrl?: string;
 }

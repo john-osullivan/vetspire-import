@@ -2,10 +2,66 @@ export const UPDATE_CLIENT_MUTATION = `
 mutation UpdateClient($id: ID!, $input: ClientInput!) {
   updateClient(id: $id, input: $input) {
     id
-    primaryLocationId
+    orgId
+    name
     givenName
     familyName
     email
+    secondaryEmail
+    businessName
+    dateOfBirth
+    title
+    notes
+    privateNotes
+    pronouns
+    pronounsOther
+    historicalId
+    mergeIdentification
+    identification
+    billingId
+    isActive
+    isMerged
+    taxExempt
+    stopReminders
+    declineEmail
+    declinePhone
+    declineRdvm
+    declineSecondaryEmail
+    insertedAt
+    updatedAt
+    verifiedAt
+    emailVerifiedDate
+    secondaryEmailVerifiedDate
+    sentEmailVerificationDate
+    sentSecondaryEmailVerificationDate
+    lastSyncedAt
+    accountCredit
+    lifetimeValue
+    trailingYearValue
+    paymentCount
+    primaryLocationId
+    clientReferralSourceId
+    customReferralSource
+    stripeCustomerId
+    cardconnectToken
+    cardconnectTokenLast4
+    cardconnectExpiry
+    squareCardId
+    addresses {
+      id
+      line1
+      city
+      state
+      postalCode
+    }
+    phoneNumbers {
+      id
+      value
+    }
+    preferredPhoneNumber {
+      id
+      value
+    }
   }
 }
 `;

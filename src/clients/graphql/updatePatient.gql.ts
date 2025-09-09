@@ -4,7 +4,36 @@ mutation UpdatePatient($id: ID!, $input: PatientInput!) {
     id
     name
     species
+    breed
+    sex
+    sexTerm
+    birthDate
+    birthYear
+    birthMonth
+    birthDay
+    color
+    age
+    isEstimatedAge
+    clientId
+    microchip
+    microchipRegistered
+    neutered
+    neuterDate
     isActive
+    isDeceased
+    deceasedDate
+    goalWeight
+    isEstimatedWeight
+    profileImageUrl
+    insertedAt
+    updatedAt
+    verifiedAt
+    lastSyncedAt
+    client {
+      id
+      givenName
+      familyName
+    }
   }
 }
 `;
