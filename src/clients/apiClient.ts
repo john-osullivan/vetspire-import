@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { ClientInput, PatientInput, ClientResponse, PatientResponse, Patient, ImmunizationDraft, ImmunizationResponse } from '../types/apiTypes';
+import { ClientInput, PatientInput, ClientResponse, PatientResponse, Patient, ImmunizationDraft, ImmunizationResponse, Immunization } from '../types/apiTypes';
 import { ImportOptions } from '../types/importOptions';
 import { rateLimit } from '../services/rateLimiter';
 import { CREATE_CLIENT_MUTATION } from './graphql/createClient.gql';
@@ -9,6 +9,7 @@ import { GET_PATIENTS_QUERY } from './graphql/getPatients.gql';
 import { UPDATE_CLIENT_MUTATION } from './graphql/updateClient.gql';
 import { UPDATE_PATIENT_MUTATION } from './graphql/updatePatient.gql';
 import { CREATE_IMMUNIZATION_MUTATION } from './graphql/createImmunization.gql';
+import { GET_PATIENTS_WITH_IMMUNIZATIONS_QUERY } from './graphql/getPatientsWithImmunizations.gql';
 
 config();
 
@@ -273,6 +274,46 @@ export async function fetchAllExistingRecords(sendApiRequests: boolean = false) 
   console.log(`Found ${allClients.length} existing clients and ${allPatients.length} existing patients`);
 
   return { clients: allClients, patients: allPatients };
+}
+
+// Patients with immunizations (single pass) and an index for quick lookup
+export type PatientWithImmunizations = Patient & { immunizations?: Immunization[] };
+
+export async function fetchAllPatientsWithImmunizations(
+  sendApiRequests: boolean = false
+): Promise<PatientWithImmunizations[]> {
+  if (!sendApiRequests) {
+    console.log('DRY RUN - Skipping fetch of patients with immunizations');
+    return [];
+  }
+
+  console.log('Fetching patients with immunizations for idempotent import...');
+  const all = await autopaginate<PatientWithImmunizations>(
+    async (limit, offset) => {
+      const data = await graphqlRequest<{ patients?: PatientWithImmunizations[] }>(
+        GET_PATIENTS_WITH_IMMUNIZATIONS_QUERY,
+        { limit, offset }
+      );
+      return Array.isArray(data.patients) ? data.patients : [];
+    },
+    'patients (with immunizations)'
+  );
+
+  console.log(`Found ${all.length} patients (with immunizations)`);
+  return all;
+}
+
+export async function fetchImmunizationsIndex(
+  sendApiRequests: boolean = false
+): Promise<Map<string, Immunization[]>> {
+  const patients = await fetchAllPatientsWithImmunizations(sendApiRequests);
+  const index = new Map<string, Immunization[]>();
+  for (const p of patients) {
+    const ims = (p as any).immunizations;
+    index.set(p.id, Array.isArray(ims) ? (ims as Immunization[]) : []);
+  }
+  console.log(`Built immunization index for ${index.size} patients`);
+  return index;
 }
 
 export async function updateClient(id: string, input: Partial<ClientInput>, options: ImportOptions = {}) {

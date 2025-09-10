@@ -1,7 +1,7 @@
 import { ClientImportRow } from "../types/clientTypes";
 import { transformInputRow, TransformationMetadata } from "./transformer.js";
-import { createClient, createPatient, fetchAllExistingRecords, findClientMatch, findPatientMatch, updateClient, updatePatient } from "../clients/apiClient.js";
-import { Client, ClientInput, Patient } from '../types/apiTypes';
+import { createClient, createPatient, fetchAllExistingRecords, findClientMatch, findPatientMatch, updateClient, updatePatient, createImmunization, fetchImmunizationsIndex } from "../clients/apiClient.js";
+import { Client, ClientInput, Patient, ImmunizationDraft, Immunization } from '../types/apiTypes';
 import { ImportOptions, ImportResult, deepEqual } from "../types/importOptions.js";
 import { isClient, isPatient } from "./typeGuards.js";
 import fs from 'fs';
@@ -301,4 +301,116 @@ export async function updateImportedPrimaryLocations(options: ImportOptions = {}
     return { updatedClients, updatedPatients };
 }
 
-// Immunization helpers moved to src/services/immunizationLookup.ts to avoid heavy imports in ESM runtime
+// ============================
+// Immunization proposal import
+// ============================
+
+function pickDefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+        if (v !== undefined) out[k] = v;
+    }
+    return out;
+}
+
+function immunizationMatches(
+    draft: ImmunizationDraft,
+    existing: Immunization,
+    env: { locationId: string; providerId: string }
+): boolean {
+    const expected = pickDefined({
+        ...draft,
+        locationId: env.locationId,
+        providerId: env.providerId,
+    }) as Record<string, unknown>;
+
+    return deepEqual(expected, existing as unknown as Record<string, unknown>);
+}
+
+export async function processImmunizationProposals(
+    proposals: ImmunizationDraft[],
+    options: ImportOptions = {}
+) {
+    if (!process.env.REAL_LOCATION_ID) throw new Error('REAL_LOCATION_ID is required');
+    if (!process.env.PROVIDER_ID) throw new Error('PROVIDER_ID is required');
+
+    const locationId = process.env.REAL_LOCATION_ID!;
+    const providerId = process.env.PROVIDER_ID!;
+
+    console.log(`Preparing to import ${proposals.length} immunizations across ${new Set(proposals.map(p => p.patient)).size} patients`);
+
+    // Fetch all patients with immunizations (single autopaginated flow)
+    const existingByPatient = await fetchImmunizationsIndex(true);
+
+    const results = {
+        timestamp: new Date().toISOString(),
+        totalProposals: proposals.length,
+        created: [] as Array<{ input: ImmunizationDraft; created: Immunization }>,
+        skipped: [] as Array<{ input: ImmunizationDraft; matchId: string }>,
+        failed: [] as Array<{ input: ImmunizationDraft; error: string }>,
+    };
+
+    let lastCreated = 0;
+    let lastSkipped = 0;
+    let lastFailed = 0;
+
+    for (let i = 0; i < proposals.length; i++) {
+        const draft = proposals[i];
+        const existingList = existingByPatient.get(draft.patient) ?? [];
+
+        const match = existingList.find((im) => immunizationMatches(draft, im, { locationId, providerId }));
+
+        if (match) {
+            results.skipped.push({ input: draft, matchId: match.id });
+        } else {
+            try {
+                const finalInput = { ...draft, locationId, providerId };
+                const res = await createImmunization(finalInput, options);
+                results.created.push({ input: draft, created: res.createImmunization });
+            } catch (err) {
+                results.failed.push({
+                    input: draft,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+                console.error(`Failed to create immunization for patientId=${draft.patient}:`, err);
+            }
+        }
+
+        if ((i + 1) % 25 === 0 || i === proposals.length - 1) {
+            const created = results.created.length;
+            const skipped = results.skipped.length;
+            const failed = results.failed.length;
+            console.log(
+                `Progress: ${i + 1}/${proposals.length}. Created ${created} (+${created - lastCreated}),` +
+                ` Skipped ${skipped} (+${skipped - lastSkipped}), Failed ${failed} (+${failed - lastFailed})`
+            );
+            lastCreated = created;
+            lastSkipped = skipped;
+            lastFailed = failed;
+        }
+    }
+
+    console.log('\nImmunization Import Summary:');
+    console.log(`Created: ${results.created.length}`);
+    console.log(`Skipped (existing): ${results.skipped.length}`);
+    console.log(`Failed: ${results.failed.length}`);
+
+    // Always write outputs
+    const fs = await import('fs');
+    const path = await import('path');
+    const outputDir = path.resolve(process.cwd(), 'outputs');
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const runType = options.sendApiRequests ? 'full' : 'dry';
+    const resultsPath = path.join(outputDir, `immunization-import-results_${runType}_${ts}.json`);
+    const failuresPath = path.join(outputDir, `immunization-import-failures_${runType}_${ts}.json`);
+    fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2));
+    fs.writeFileSync(
+        failuresPath,
+        JSON.stringify({ timestamp: results.timestamp, failed: results.failed }, null, 2)
+    );
+    console.log(`Results written to: ${resultsPath}`);
+    console.log(`Failures written to: ${failuresPath}`);
+
+    return results;
+}

@@ -10,15 +10,16 @@ mutation CreateImmunization($input: ImmunizationInput!) {
     declined
     historical
     immunizationStatus
-    immunizationType
+    type
     route
     site
     lotNumber
     manufacturer
     expiryDate
     isRabies
-    locationId
-    providerId
+    location
+    provider
+    rabiesTagNumber
   }
 }
 `;

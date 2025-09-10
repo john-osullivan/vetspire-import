@@ -14,7 +14,8 @@
     "sync-commands": "node scripts/sync-commands.js",
     "postinstall": "npm run sync-commands",
     "update-import": "tsx src/commands/update-import.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "import-immunizations": "tsx src/commands/import-immunizations.ts"
   },
   "author": "",
   "license": "ISC",

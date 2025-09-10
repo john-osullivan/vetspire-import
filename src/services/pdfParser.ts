@@ -206,42 +206,6 @@ function collectLotMeta(lines: string[], startIndex: number): VaccineLotMeta | n
   return { lotNumber: lotNumber || '', manufacturer: manufacturer || '', expiryDate: expiryDate || '' };
 }
 
-// Extract just the lot grouping metadata in order of appearance
-export function parseVaccineLots(pdfText: string): VaccineLotMeta[] {
-  const lots: VaccineLotMeta[] = [];
-  const lines = pdfText.split('\n').map(l => l.trim()).filter(Boolean);
-
-  let encounteredAnyLot = false;
-
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
-
-    if (/^lot\s*#?\s*manufacturer/i.test(line)) {
-      const meta = collectLotMeta(lines, lineIndex);
-      if (meta && meta.lotNumber) {
-        lots.push(meta);
-        encounteredAnyLot = true;
-      } else if (!encounteredAnyLot) {
-        // First batch may be error rows with missing lot/manufacturer
-        lots.push({ lotNumber: '', manufacturer: '', expiryDate: '' });
-        encounteredAnyLot = true;
-      }
-    }
-  }
-
-  return lots;
-}
-
-// Full row parsing – scaffolded for future expansion, not used by tests yet
-function isDateToken(token: string): boolean {
-  const parts = token.split('/');
-  if (parts.length !== 3) return false;
-  const [m, d, y] = parts;
-  if (!/^[0-9]{1,2}$/.test(m)) return false;
-  if (!/^[0-9]{1,2}$/.test(d)) return false;
-  if (!/^[0-9]{4}$/.test(y)) return false;
-  return true;
-}
 
 function consumeDateAtStart(text: string): { date: string; rest: string } | null {
   const trimmed = text.trim();

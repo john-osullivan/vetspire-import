@@ -280,16 +280,16 @@ export interface ImmunizationInput {
   historical?: boolean;
   immunizationStatus?: ImmunizationStatus;
   isRabies?: boolean;
-  locationId?: ID;
+  location?: ID;
   lotNumber?: string;
   manufacturer?: string;
   name?: string;
-  patientId?: ID;
-  providerId?: ID;
+  patient?: ID;
+  provider?: ID;
   route?: RouteType;
   site?: string;
   technicianId?: ID;
-  immunizationType?: ImmunizationType;
+  type?: ImmunizationType;
 }
 
 // Stronger draft type used by our importer for creation
@@ -305,10 +305,10 @@ export type ImmunizationDraft = RequireKeys<
   | 'lotNumber'
   | 'manufacturer'
   | 'name'
-  | 'patientId'
+  | 'patient'
   | 'route'
   | 'site'
-  | 'immunizationType'
+  | 'type'
 >;
 
 export interface Immunization extends BaseEntity {
