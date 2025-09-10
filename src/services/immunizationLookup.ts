@@ -10,11 +10,11 @@ type PatientForLookup = Pick<Patient, 'id' | 'name'> & {
 
 export function buildPatientLookup(patients: PatientForLookup[]): Map<string, string> {
   return patients.reduce<Map<string, string>>((acc, p) => {
-    const patientName = (p.name || '').trim();
-    const given = (p.client?.givenName || '').trim();
-    const family = (p.client?.familyName || '').trim();
-    if (!patientName || !given || !family) {
-      throw new Error(`Patient lookup requires client names. Offending patient id=${p.id}`);
+    const patientName = (p.name || '').trim().toLowerCase();
+    const given = (p.client?.givenName || '').trim().toLowerCase();
+    const family = (p.client?.familyName || '').trim().toLowerCase();
+    if (!patientName || (!given && !family)) {
+      throw new Error(`Patient lookup requires client names. Offending patient id=${p.id}, name='${p.name}', client.givenName='${p.client?.givenName}', client.familyName='${p.client?.familyName}'`);
     }
     const key = patientClientKey(patientName, family, given);
     if (!acc.has(key)) acc.set(key, p.id);

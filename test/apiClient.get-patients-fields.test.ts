@@ -13,17 +13,22 @@ describe('getPatients query shape (live)', () => {
       return;
     }
 
-    const res = await findExistingPatients(true, 10, 0);
+    const res = await findExistingPatients(true, 100, 0);
     const patients = Array.isArray((res as { patients: unknown }).patients)
       ? (res as { patients: Array<any> }).patients
       : [];
 
-    if (patients.length === 0) return;
+    if (patients.length === 0) {
+      throw new Error('No patients returned from API; cannot verify shape');
+    }
 
-    const first = patients[0];
-    expect(typeof first.id).toBe('string');
-    expect(first.client && typeof first.client.givenName).toBe('string');
-    expect(first.client && typeof first.client.familyName).toBe('string');
+    patients.every((patient) => {
+      expect(typeof patient.id).toBe('string');
+      expect(typeof patient.name).toBe('string');
+      expect(patient.client && typeof patient.client.givenName).toBe('string');
+      expect(patient.client && typeof patient.client.familyName).toBe('string');
+      return true;
+    })
   });
 });
 

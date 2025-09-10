@@ -266,7 +266,6 @@ export async function fetchAllExistingRecords(sendApiRequests: boolean = false) 
     },
     'patients'
   );
-  if (!Array.isArray(allPatients)) allPatients = [];
 
   if (!Array.isArray(allClients)) allClients = [];
   if (!Array.isArray(allPatients)) allPatients = [];

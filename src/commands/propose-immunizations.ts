@@ -4,9 +4,10 @@ import { hideBin } from 'yargs/helpers';
 import fs from 'fs';
 import path from 'path';
 import { extractTextFromPdf, extractPdf2Json } from '../clients/pdfClient.js';
-import { parseVaccineRecords, parseVaccineRecordsStructured, writeVaccineRowsToJSON } from '../services/pdfParser.js';
+import { parseVaccineRecords, parseVaccineRecordsStructured, VaccineDeliveryRow, writeVaccineRowsToJSON } from '../services/pdfParser.js';
 import { buildPatientLookup, patientClientKey } from '../services/immunizationLookup.js';
 import { toImmunizationDraft } from '../services/transformer.js';
+import { fetchAllExistingRecords } from '../clients/apiClient.js';
 
 type Proposal = ReturnType<typeof toImmunizationDraft>;
 
@@ -61,7 +62,7 @@ async function main() {
   }
 
   console.log(`Reading vaccine PDF: ${pdfPath}`);
-  let rows;
+  let rows: VaccineDeliveryRow[] = [];
   if (preferStructured) {
     const doc = await extractPdf2Json(pdfPath);
     if (!doc) throw new Error('Failed to load pdf2json module for structured parsing');
@@ -80,7 +81,6 @@ async function main() {
   let patientLookup = new Map<string, string>();
   if (doFetch) {
     console.log('Fetching existing patients for lookup...');
-    const { fetchAllExistingRecords } = await import('../clients/apiClient.js');
     const { patients } = await fetchAllExistingRecords(true);
     patientLookup = buildPatientLookup(patients as any);
     console.log(`Built lookup with ${patientLookup.size} keys`);
@@ -99,15 +99,7 @@ async function main() {
       unmatched.push({
         key,
         row: {
-          dateGiven: row.dateGiven,
-          dateDue: row.dateDue,
-          patientName: row.patientName,
-          clientGivenName: row.clientGivenName,
-          clientFamilyName: row.clientFamilyName,
-          description: row.description,
-          lotNumber: row.lotNumber,
-          manufacturer: row.manufacturer,
-          expiryDate: row.expiryDate,
+          ...row
         },
         reason: 'no_match',
       });
@@ -142,6 +134,7 @@ async function main() {
   };
 
   fs.writeFileSync(outPath, JSON.stringify(payload, null, 2));
+  console.log(`Prepared ${proposals.length} immunization proposals; expecting to create ${proposals.length} immunizations, skipped ${unmatched.length} unmatched rows.`);
   console.log('Proposals written to:', outPath);
 }
 

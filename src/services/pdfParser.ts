@@ -521,9 +521,7 @@ export function parseVaccineRecordsStructured(doc: Pdf2JsonDoc): VaccineDelivery
         const expRaw = xExp !== undefined ? cellTextInRange(row, xExp + 0.1, Number.POSITIVE_INFINITY)
           .replace('Expires ', '')
           .trim() : '';
-        console.log(`Found lot section: Lot='${lotNumber}' Manufacturer='${manufacturer}' Expires='${expRaw}'`);
         const expiryDate = normalizeMmDdYyyy(expRaw) || '';
-        console.log(`  Normalized expiry: '${expiryDate}'`);
 
         lotMeta = { lotNumber: lotNumber.trim(), manufacturer: manufacturer.trim(), expiryDate };
         inTable = false;
@@ -590,7 +588,7 @@ export function parseVaccineRecordsStructured(doc: Pdf2JsonDoc): VaccineDelivery
         expiryDate: lotMeta.expiryDate,
       };
 
-      rowsOut.push(rowOut);
+      if (rowOut.description.length > 0) rowsOut.push(rowOut);
     }
   }
 
