@@ -1,43 +1,224 @@
-# Goal: Importing clients & patients from a PDF into the Vetspire API
+# Vetspire Import Toolkit (Clients, Patients, Immunizations)
 
-You're going to help me write a script which migrates a veterinary clinic's data from a PDF report into their new SaaS provider _VetSpire_'s GraphQL API.
+This repository contains a small set of TypeScript CLIs to migrate a veterinary clinic’s legacy data into the Vetspire platform via GraphQL. It focuses on two PDF export formats supported by the previous Advantage system: a client/patient roster PDF and a vaccine history report PDF.
 
-- Patients are pets, clients are their owners.
-- Once we ingest that PDF and turn it into a clean CSV intermediate format, we'll then use the Vetspire API to create the relevant resources.
-- VetSpire API documentation can be found here: https://developer.vetspire.com/
-- We should try to enrich the data as much as possible. I'll pull together a list of fields that can possibly be included in the export, please match them against fields that can be provided through VetSpire's GraphQL API.
-- While we might eventually consider importing visit records, for now, we'll just focus on importing the set of clients and patients.
+The toolchain parses those PDFs, prepares clean intermediate files, and performs idempotent imports into Vetspire with dry‑run support, throttling, and timestamped audit outputs.
 
-The PDF includes each patient-client pair in blocks that are separated by a couple lines. Each block includes a collection of labeled fields -- labels italicized, values regular.
+## Why this exists
 
-We'll complete this task in a few phases:
+- Many clinics export data in formats that aren’t directly importable (e.g., labeled PDFs rather than CSV/JSON).
+- Vetspire exposes a comprehensive GraphQL API, but translating messy legacy output into safe, structured create/update operations is non‑trivial.
+- This project bridges that gap: parse → transform → import while avoiding duplicates and giving operators clear visibility into what happened.
 
-1. Write some Typescript which successfully parses the PDF into an array of keyed objects.
-   - Run it with tsx
-   - Set up a basic tsconfig which disallows implicit any and enforces strict null checks
-   - Define an interface based on what you can find in the PDF
-2. Add a data cleaning step into our script, converting inputs to have all the desired fields for our API.
-   - In particular, we have a field `patientSexSpay` which really holds two different values for our API.
-     - The field has two characters, the capital letters from Male or Female and Intact or Spayed. So a value of MI means a male who hasn't been spayed, a value of FS means a female who has been.
-     - I'd like our array of keyed objects to have separate `patientSex` and `patientSpayed` values, where the latter is a boolean.
-   - For deceased, the `patientStatus` field will say either "Deceased" or "N/A - D". We'll want `patientDeceased` to be a boolean in our keyed object
-     - Patient status is stored as a code which is a little less legible, but I know that the majority of patients have the status "Home", and that code is H. From the user's perspective, the full status list is: Home, Appointment, Boarding, Deceased, Exam 1, Exam 3, Hospitalized, ICU, In Process, Isolation, Lobby, N/A, N/A - D, New, Release, Surgery, Waiting Room
-   - A client who no longer has any active pets with the vet, their status will be marked as inactive.
-3. Write a VetSpire GraphQL API client.
-   - Download the documentation to refresh your memory: https://developer.vetspire.com/
-   - Based on our stated goals, import the documentation and create Typescript types for all of the relevant GraphQL resources, entities, API calls, etc.
-   - Figure out a reusable request function which correctly manages authentication. Use .env files to manage secret keys, I'll plug mine in.
-   - Using the generic request function, write helper functions for each of the operations we care about:
-     - Looking up clients by email to see if a record already exists.
-     - Creating/update clients & patients.
-     - You should also add a helper method for marking a patient as inactive, as that'll help us clean up intermediate runs while we test everything out.
-4. Write the full import script. For each client-patient pair, you'll:
-   - Check whether a client already exists with the given email. If yes, check whether they have an associated patient with the given name. If the patient or client are missing, follow the steps below for creating a client.
-   - Create a client and then create a patient on it.
-     - The client will get a new ID from the system, we should store that in an output JSON named `import_results`.
-     - That JSON should include one keyed object per client-patient pair, where that object has two keys, "client" and "patient". Even if a client already existed and we only had to create a patient, both objects should be included here.
-     - Each of those should include the full resource we produced, including every field that the GraphQL API will give us. If there's more than one pet for the same client, then update the existing { client: Client, patient: Patient } object to instead be { client: Client, patients: Patient[] }
-     - If we find that one client has more than one patient associated with them
-   - Output a log for each pair created, not too verbose, something like "Created a [dog] named [Vince], owned by [Jane] [Doe] since [patientDOB]". If this is an additional pet for an existing client, add a tag "(pet #n)", where n is the new length of the patients array.
-   - Give the script a CLI param to limit how many pets we attempt to import.
-5. Run the import script for a limited chunk of the CSV against their test clinic, that way we make sure everything behaves. I'll have the Vetspire dashboard open and can make comments on how to adjust.
+## What’s implemented
+
+- PDF → CSV converter for client/patient rosters
+  - Parses a labeled roster PDF (example: `advantage_labeled_export.pdf`) into a normalized CSV suitable for import.
+- Idempotent client/patient importer
+  - Transforms each CSV row to Vetspire `ClientInput` + `PatientInput` (sex/neuter decoding, deceased detection, addresses/phones, active flags, historical IDs).
+  - Checks existing records (by historical ID, email, or name) and creates, updates, or skips accordingly.
+  - Dry‑run by default; opt‑in to real API calls with `--full-send`.
+  - Timestamped JSON result files with successes, failures, updates, and skips.
+- Immunization proposal builder (from vaccine PDF)
+  - Parses a vaccine report PDF (example: `vaccine_export.pdf`) by lot sections and table rows using `pdf2json` positional data.
+  - Optionally fetches current Vetspire patients to match rows to patient IDs via a deterministic key: `patientName_(Family, Given)`.
+  - Produces a `proposals` JSON along with an `unmatched` list for review.
+- Immunization importer
+  - Reads proposals and creates immunizations idempotently.
+  - Skips when a matching immunization already exists (field-by-field comparison including location/provider).
+  - Always writes results and failures JSON to `./outputs`.
+- Utilities
+  - `update-import`: scans imported records and updates placeholder location IDs to your real location (useful after test imports).
+  - Simple request rate limiter (≈5 req/s) to be polite to the API.
+
+## Prerequisites
+
+- Node.js 18+ (uses built‑in `fetch` and ESM)
+- npm
+- Vetspire API credentials and IDs (see “Environment”)
+- The source PDFs you plan to import
+
+## Setup
+
+1. Install dependencies
+
+```bash
+npm install
+```
+
+2. Configure environment
+
+Copy `.env.example` to `.env` and fill in values provided by your Vetspire account:
+
+```bash
+VETSPIRE_API_KEY="<api_key>"
+VETSPIRE_API_URL="https://api2.vetspire.com/graphql"
+TEST_LOCATION_ID=<optional_test_location>
+REAL_LOCATION_ID=<your_real_location_id>
+PROVIDER_ID=<provider_id_for_immunizations>
+```
+
+Notes:
+
+- Keep your real secrets out of source control; use `.env`, shells, or your preferred secrets manager.
+- Many commands require `REAL_LOCATION_ID`; immunization import also requires `PROVIDER_ID`.
+
+## Commands (CLIs)
+
+Commands are auto‑synced from `src/commands` into `package.json` scripts. Run them via npm.
+
+### Convert client/patient roster PDF → CSV
+
+```bash
+npm run convert-pdf -- ./advantage_labeled_export.pdf --output ./outputs
+```
+
+Produces a timestamped CSV in `./outputs` with columns defined by `src/types/clientTypes.ts` (e.g., `patientId, patientName, patientSpecies, ...`).
+
+### Import clients and patients from CSV
+
+Dry‑run (default):
+
+```bash
+npm run import-csv -- ./outputs/client-patient-records_....csv
+```
+
+Actually send to Vetspire:
+
+```bash
+npm run import-csv -- ./outputs/client-patient-records_....csv --full-send
+```
+
+Options:
+
+- `--limit <n>`: process only the first N rows
+- `--verbose`: print GraphQL variables and responses
+- `--track-results`: write detailed JSON results and failures to `./outputs`
+
+### Propose immunizations from vaccine PDF
+
+```bash
+npm run propose-immunizations -- ./vaccine_export.pdf --output ./outputs --fetch --dump-rows
+```
+
+What it does:
+
+- Parses vaccine deliveries grouped by lot/manufacturer/expiry.
+- Optionally fetches all current patients (with client names) to map each row to a `patientId`.
+- Writes a proposals JSON with `proposals` (ready to import) and `unmatched` (rows lacking a matching patient).
+
+Options:
+
+- `--fetch`/`--no-fetch`: toggle fetching patients for matching (default: fetch)
+- `--structured`: prefer `pdf2json` structured parsing (default: true)
+- `--dump-rows`: emit a raw parsed rows JSON alongside proposals
+
+### Import immunizations from proposals JSON
+
+Dry‑run (default):
+
+```bash
+npm run import-immunizations -- ./outputs/immunization-proposals_....json
+```
+
+Full send:
+
+```bash
+npm run import-immunizations -- ./outputs/immunization-proposals_....json --full-send
+```
+
+Requirements: `REAL_LOCATION_ID` and `PROVIDER_ID` must be set.
+
+### Update imported primary locations
+
+```bash
+npm run update-import -- --full-send
+```
+
+Finds records previously imported with placeholder/test location IDs and updates them to your `REAL_LOCATION_ID`. Useful if you did a test import before switching to the real location.
+
+### Rollback (placeholder)
+
+`npm run rollback-import` is scaffolded but not implemented. The intended behavior is to deactivate or remove records created by a prior run; it currently does not perform changes.
+
+## Transformation details (clients & patients)
+
+Source columns are defined in `src/types/clientTypes.ts`. Key transformation logic lives in `src/services/transformer.ts`:
+
+- Sex and neuter status: legacy codes `MI, MN, FI, FS` → `sex` + `neutered`.
+- Deceased detection: `patientStatus` codes include `D` and `ND` (treated as deceased flags per source data notes).
+- Client activity: clients are marked inactive if their only pet is deceased (via the same row’s status).
+- Address and phone: assembled from present, non‑placeholder fields.
+- Historical IDs: original IDs are carried into `historicalId` for matching and traceability.
+- Location: `createClient` always sets `primaryLocationId` to `REAL_LOCATION_ID`.
+- Flags like `isEstimatedAge`/`isEstimatedWeight` are set when exact values aren’t available.
+
+## Idempotency rules
+
+To avoid duplicates, imports compare incoming data against existing records fetched from Vetspire:
+
+- Client matching order: `historicalId` → email → (`givenName` + `familyName`)
+- Patient matching order: `historicalId` → (`name` + `clientId`)
+- On match, a minimal deep comparison is used to decide whether to `update` or `skip`.
+- Results JSONs enumerate created/updated/skipped/failed objects for audit and retry.
+
+## Immunization proposals and import
+
+Parsing (`src/services/pdfParser.ts`):
+
+- Uses `pdf2json` positional data to reliably extract lot metadata and row columns (date given, date due, patient, client, description, tag).
+- Extracts rabies tag numbers from either the dedicated Tag column or as a trailing token in Description.
+
+Transformation (`src/services/transformer.ts`):
+
+- `type`: `INITIAL` unless description suggests a booster (e.g., contains `# 2`, `2nd`, `3rd`).
+- `route`: `INTRANASAL` if description contains “intranasal”; otherwise `SUBCUTANEOUS`.
+- `immunizationStatus`: `ACTIVE` if due date is in the future; else `COMPLETED`.
+- `administered: true`, `declined: false`, `historical: true`, `site: "Unknown (Legacy)"`.
+
+Import (`src/services/importer.ts`):
+
+- Builds an index of existing immunizations per patient.
+- Compares each proposal to existing entries (including location/provider) and skips exact matches.
+- Creates missing immunizations, writing results/failures to `./outputs`.
+
+## Outputs
+
+All CLIs write their artifacts to `./outputs` using ISO‑like timestamped filenames so runs sort chronologically. Examples:
+
+- `client-patient-records_YYYY-MM-DDTHH-mm-ssZ.csv`
+- `import-results_full|dry_real_YYYY-MM-DDTHH-mm-ssZ.json`
+- `immunization-proposals_YYYY-MM-DDTHH-mm-ssZ.json`
+- `immunization-import-results_full|dry_YYYY-MM-DDTHH-mm-ssZ.json`
+
+## Project layout
+
+- `src/commands/*` — CLI entrypoints (yargs)
+- `src/services/*` — parsing, transformation, import logic
+- `src/clients/*` — adapters for PDFs and Vetspire GraphQL
+- `src/types/*` — TypeScript models for inputs and Vetspire API
+- `test/*` and `src/test/*` — integration tests and helpers
+
+## Testing
+
+Run all tests:
+
+```bash
+npm test
+```
+
+Notes:
+
+- Some tests hit the real Vetspire API; they automatically skip if `VETSPIRE_API_URL` and `VETSPIRE_API_KEY` aren’t set.
+- PDF‑parsing integration tests expect the sample PDFs to be present at repository root (e.g., `advantage_labeled_export.pdf`, `vaccine_export.pdf`).
+
+## Limitations and notes
+
+- The PDF parsers are tailored to the example reports included here. Other clinics’ exports may require small adjustments to the parsing heuristics.
+- `rollback-import` is not implemented; prefer dry‑runs and small `--limit` slices before enabling `--full-send`.
+- The importer throttles requests but you should still respect Vetspire rate limits and operational windows.
+- Always review generated outputs in `./outputs` before moving on to the next step.
+
+## License
+
+See `LICENSE`.
