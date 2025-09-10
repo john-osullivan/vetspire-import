@@ -13,7 +13,18 @@ query GetPatientsWithImmunizations($limit: Int, $offset: Int) {
     immunizations {
       id
       name
-      patientId
+      patient {
+        id
+        name
+      }
+      location {
+        id
+        name
+      }
+      provider {
+        id
+        name
+      }
       date
       dueDate
       administered
@@ -27,8 +38,6 @@ query GetPatientsWithImmunizations($limit: Int, $offset: Int) {
       manufacturer
       expiryDate
       isRabies
-      location
-      provider
       rabiesTagNumber
     }
   }

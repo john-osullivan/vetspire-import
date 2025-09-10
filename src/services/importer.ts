@@ -322,8 +322,8 @@ function immunizationMatches(
     const { patient: _omit, ...rest } = draft as unknown as Record<string, unknown>;
     const expected = pickDefined({
         ...rest,
-        location: env.location,
-        provider: env.provider,
+        location: { id: env.location },
+        provider: { id: env.provider },
     });
 
     return deepEqual(expected, existing as unknown as Record<string, unknown>);
@@ -339,7 +339,7 @@ export async function processImmunizationProposals(
     const locationId = process.env.REAL_LOCATION_ID!;
     const providerId = process.env.PROVIDER_ID!;
 
-    console.log(`Preparing to import ${proposals.length} immunizations across ${new Set(proposals.map(p => p.patient)).size} patients`);
+    console.log(`Preparing to import ${proposals.length} immunizations across ${new Set(proposals.map(p => p.patientId)).size} patients`);
 
     // Fetch all patients with immunizations (single autopaginated flow)
     const existingByPatient = await fetchImmunizationsIndex(true);
@@ -358,7 +358,7 @@ export async function processImmunizationProposals(
 
     for (let i = 0; i < proposals.length; i++) {
         const draft = proposals[i];
-        const existingList = existingByPatient.get(draft.patient) ?? [];
+        const existingList = existingByPatient.get(draft.patientId) ?? [];
 
         const match = existingList.find((im) => immunizationMatches(draft, im, { location: locationId, provider: providerId }));
 
@@ -366,7 +366,7 @@ export async function processImmunizationProposals(
             results.skipped.push({ input: draft, matchId: match.id });
         } else {
             try {
-                const finalInput = { ...draft, location: locationId, provider: providerId } as unknown as ImmunizationDraft;
+                const finalInput = { ...draft, locationId, providerId } as unknown as ImmunizationDraft;
                 const res = await createImmunization(finalInput, options);
                 results.created.push({ input: draft, created: res.createImmunization });
             } catch (err) {
@@ -374,7 +374,7 @@ export async function processImmunizationProposals(
                     input: draft,
                     error: err instanceof Error ? err.message : String(err),
                 });
-                console.error(`Failed to create immunization for patientId=${draft.patient}:`, err);
+                console.error(`Failed to create immunization for patientId=${draft.patientId}:`, err);
             }
         }
 

@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { ClientInput, PatientInput, ClientResponse, PatientResponse, Patient, ImmunizationDraft, ImmunizationResponse, Immunization } from '../types/apiTypes';
 import { ImportOptions } from '../types/importOptions';
-import { rateLimit } from '../services/rateLimiter.js';
+import { rateLimit } from '../services/rateLimiter';
 import { CREATE_CLIENT_MUTATION } from './graphql/createClient.gql';
 import { CREATE_PATIENT_MUTATION } from './graphql/createPatient.gql';
 import { GET_CLIENTS_QUERY } from './graphql/getClients.gql';
@@ -332,12 +332,12 @@ export async function createImmunization(input: ImmunizationDraft, options: Impo
   await rateLimit();
   const query = CREATE_IMMUNIZATION_MUTATION;
 
-  const location = process.env.REAL_LOCATION_ID;
-  const provider = process.env.PROVIDER_ID;
-  if (!location) throw new Error('REAL_LOCATION_ID is required');
-  if (!provider) throw new Error('PROVIDER_ID is required');
+  const locationId = process.env.REAL_LOCATION_ID;
+  const providerId = process.env.PROVIDER_ID;
+  if (!locationId) throw new Error('REAL_LOCATION_ID is required');
+  if (!providerId) throw new Error('PROVIDER_ID is required');
 
-  const finalInput = { ...input, location, provider } as ImmunizationDraft;
+  const finalInput = { ...input, locationId, providerId } as ImmunizationDraft;
 
   if (!options.sendApiRequests) {
     console.log('DRY RUN - Would send createImmunization with input:', JSON.stringify(finalInput, null, 2));

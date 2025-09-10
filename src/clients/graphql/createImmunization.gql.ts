@@ -3,7 +3,10 @@ mutation CreateImmunization($input: ImmunizationInput!) {
   createImmunization(input: $input) {
     id
     name
-    patientId
+    patient {
+      id
+      name
+    }
     date
     dueDate
     administered
@@ -17,8 +20,14 @@ mutation CreateImmunization($input: ImmunizationInput!) {
     manufacturer
     expiryDate
     isRabies
-    location
-    provider
+    location {
+      id
+      name
+    }
+    provider {
+      id
+      name
+    }
     rabiesTagNumber
   }
 }

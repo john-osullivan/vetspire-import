@@ -280,12 +280,12 @@ export interface ImmunizationInput {
   historical?: boolean;
   immunizationStatus?: ImmunizationStatus;
   isRabies?: boolean;
-  location?: ID;
+  locationId?: ID;
   lotNumber?: string;
   manufacturer?: string;
   name?: string;
-  patient?: ID;
-  provider?: ID;
+  patientId?: ID;
+  providerId?: ID;
   route?: RouteType;
   site?: string;
   technicianId?: ID;
@@ -306,7 +306,7 @@ export type ImmunizationDraft = RequireKeys<
   | 'lotNumber'
   | 'manufacturer'
   | 'name'
-  | 'patient'
+  | 'patientId'
   | 'route'
   | 'site'
   | 'type'
@@ -314,7 +314,6 @@ export type ImmunizationDraft = RequireKeys<
 
 export interface Immunization extends BaseEntity {
   name?: string;
-  patientId?: ID;
   date?: Date;
   dueDate?: Date;
   administered?: boolean;
@@ -328,8 +327,18 @@ export interface Immunization extends BaseEntity {
   manufacturer?: string;
   expiryDate?: Date;
   isRabies?: boolean;
-  locationId?: ID;
-  providerId?: ID;
+  patient?: {
+    id: ID;
+    name: string;
+  }
+  location?: {
+    id: ID;
+    name: string;
+  };
+  provider?: {
+    id: ID;
+    name: string;
+  };
   rabiesTagNumber?: string;
 }
 

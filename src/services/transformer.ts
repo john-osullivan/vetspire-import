@@ -257,7 +257,7 @@ export function toImmunizationDraft(row: VaccineDeliveryRow, patientId: string):
         lotNumber: row.lotNumber,
         manufacturer: row.manufacturer,
         name: row.description,
-        patient: patientId,
+        patientId: patientId,
         route: detectRoute(row.description),
         site: 'Unknown (Legacy)',
         type: detectImmunizationType(row.description),
