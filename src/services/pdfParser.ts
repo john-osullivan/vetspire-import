@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { ClientImportRow, EMPTY_CLIENT } from '../types/clientTypes.js';
+import type { Pdf2JsonDoc, Pdf2JsonPage } from '../clients/pdfClient.js';
 const IMPORT_KEYS = Object.keys(EMPTY_CLIENT);
 
 export function parseClientPatientRecords(pdfText: string): ClientImportRow[] {
@@ -106,10 +107,9 @@ export function splitColumnsBySpacing(line: string): string[] {
 
 export function normalizeMmDdYyyy(mdy?: string): string | undefined {
   if (!mdy) return undefined;
-  const match = mdy.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return undefined;
-  const [, m, d, y] = match;
-  const iso = new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
+  const [month, day, year] = mdy.split('/').map(s => s.trim());
+  if (!month || !day || !year) return undefined;
+  const iso = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
   if (isNaN(iso.getTime())) return undefined;
   return iso.toISOString().slice(0, 10);
 }
@@ -407,11 +407,6 @@ export function writeVaccineRowsToJSON(rows: VaccineDeliveryRow[], outputDir: st
   return filePath;
 }
 
-// =========================
-// Structured parsing via pdf2json (optional)
-// =========================
-import type { Pdf2JsonDoc, Pdf2JsonPage, Pdf2JsonText } from '../clients/pdf2jsonClient.js';
-
 function decodeText(t?: string): string {
   if (!t) return '';
   try { return decodeURIComponent(t); } catch { return t; }
@@ -517,10 +512,18 @@ export function parseVaccineRecordsStructured(doc: Pdf2JsonDoc): VaccineDelivery
         const xMan = findTokenX(row, 'Manufacturer') ?? 9999;
         const xExp = findTokenX(row, 'Expires');
 
-        const lotNumber = cellTextInRange(row, xLot + 0.1, xMan) || '';
-        const manufacturer = cellTextInRange(row, xMan + 0.1, xExp ?? Number.POSITIVE_INFINITY) || '';
-        const expRaw = xExp !== undefined ? cellTextInRange(row, xExp + 0.1, Number.POSITIVE_INFINITY) : '';
+        const lotNumber = cellTextInRange(row, xLot + 0.1, xMan)
+          .replace('Lot #', '')
+          .trim() || '';
+        const manufacturer = cellTextInRange(row, xMan + 0.1, xExp ?? Number.POSITIVE_INFINITY)
+          .replace('Manufacturer', '')
+          .trim() || '';
+        const expRaw = xExp !== undefined ? cellTextInRange(row, xExp + 0.1, Number.POSITIVE_INFINITY)
+          .replace('Expires ', '')
+          .trim() : '';
+        console.log(`Found lot section: Lot='${lotNumber}' Manufacturer='${manufacturer}' Expires='${expRaw}'`);
         const expiryDate = normalizeMmDdYyyy(expRaw) || '';
+        console.log(`  Normalized expiry: '${expiryDate}'`);
 
         lotMeta = { lotNumber: lotNumber.trim(), manufacturer: manufacturer.trim(), expiryDate };
         inTable = false;

@@ -3,9 +3,8 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import fs from 'fs';
 import path from 'path';
-import { extractTextFromPdf } from '../clients/pdfClient.js';
+import { extractTextFromPdf, extractPdf2Json } from '../clients/pdfClient.js';
 import { parseVaccineRecords, parseVaccineRecordsStructured, writeVaccineRowsToJSON } from '../services/pdfParser.js';
-import { extractPdf2Json } from '../clients/pdf2jsonClient.js';
 import { buildPatientLookup, patientClientKey } from '../services/immunizationLookup.js';
 import { toImmunizationDraft } from '../services/transformer.js';
 
@@ -38,7 +37,7 @@ async function main() {
     })
     .option('structured', {
       type: 'boolean',
-      default: false,
+      default: true,
       describe: 'Prefer pdf2json structured parsing if available',
     })
     .option('dump-rows', {
@@ -65,14 +64,8 @@ async function main() {
   let rows;
   if (preferStructured) {
     const doc = await extractPdf2Json(pdfPath);
-    if (doc) {
-      rows = parseVaccineRecordsStructured(doc);
-      console.log(`Parsed with pdf2json (structured)`);
-    } else {
-      console.warn('pdf2json not available. Falling back to text parser. Install with: npm i pdf2json');
-      const text = await extractTextFromPdf(pdfPath);
-      rows = parseVaccineRecords(text);
-    }
+    if (!doc) throw new Error('Failed to load pdf2json module for structured parsing');
+    rows = parseVaccineRecordsStructured(doc);
   } else {
     const text = await extractTextFromPdf(pdfPath);
     rows = parseVaccineRecords(text);
