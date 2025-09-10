@@ -290,6 +290,7 @@ export interface ImmunizationInput {
   site?: string;
   technicianId?: ID;
   type?: ImmunizationType;
+  rabiesTagNumber?: string;
 }
 
 // Stronger draft type used by our importer for creation
@@ -329,6 +330,7 @@ export interface Immunization extends BaseEntity {
   isRabies?: boolean;
   locationId?: ID;
   providerId?: ID;
+  rabiesTagNumber?: string;
 }
 
 export interface ImmunizationResponse {

@@ -261,5 +261,6 @@ export function toImmunizationDraft(row: VaccineDeliveryRow, patientId: string):
         route: detectRoute(row.description),
         site: 'Unknown (Legacy)',
         type: detectImmunizationType(row.description),
+        rabiesTagNumber: row.rabiesTagNumber || '',
     };
 }

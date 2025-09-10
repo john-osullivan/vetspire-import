@@ -92,6 +92,7 @@ export interface VaccineDeliveryRow {
   lotNumber: string;         // may be '' for first error batch
   manufacturer: string;      // may be '' for first error batch
   expiryDate: string;        // YYYY-MM-DD or '' if unknown
+  rabiesTagNumber?: string;  // extracted tag like 123-45 (optional)
 }
 
 export interface VaccineLotMeta {
@@ -252,12 +253,99 @@ function findClientAtLineEnd(text: string): { clientFamilyName: string; clientGi
   return { clientFamilyName: family, clientGivenName: given, beforeClient };
 }
 
-function stripTrailingTagNumber(text: string): { withoutTag: string } {
-  // Normalize hyphens
-  let s = text.trim().replace(/\s*[-–]\s*/g, '-');
-  // Remove trailing tag forms like ...123-45 or ...123--45
-  s = s.replace(/(\d{2,4})(?:--|-)\d{2}$/, '').trim();
-  return { withoutTag: s };
+function toAsciiHyphen(s: string): string {
+  return s.replaceAll('–', '-').replaceAll('—', '-');
+}
+
+function collapseHyphens(s: string): string {
+  let out = s;
+  while (out.includes('--')) out = out.replace('--', '-');
+  return out;
+}
+
+function isAllDigits(s: string): boolean {
+  if (!s) return false;
+  for (const ch of s) {
+    if (ch < '0' || ch > '9') return false;
+  }
+  return true;
+}
+
+function isProviderCode(tok: string): boolean {
+  if (!tok) return false;
+  const t = tok.trim();
+  if (t.length < 2 || t.length > 5) return false;
+  const last = t[t.length - 1];
+  const letters = last >= '0' && last <= '9' ? t.slice(0, -1) : t;
+  if (letters.length < 2 || letters.length > 4) return false;
+  for (const ch of letters) {
+    if (ch < 'A' || ch > 'Z') return false;
+  }
+  return true;
+}
+
+function stripTrailingTagNumber(text: string): { withoutTag: string; rabiesTagNumber?: string } {
+  let s = toAsciiHyphen(text.trim());
+
+  const tokens = s.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return { withoutTag: s };
+
+  // Drop trailing provider codes
+  while (tokens.length && isProviderCode(tokens[tokens.length - 1])) {
+    tokens.pop();
+  }
+  if (tokens.length === 0) return { withoutTag: '' };
+
+  // Try two-token form: prev + last
+  if (tokens.length >= 2) {
+    const last = tokens[tokens.length - 1];
+    const prevRaw = tokens[tokens.length - 2];
+
+    if (last.length === 2 && isAllDigits(last)) {
+      const prevCollapsed = collapseHyphens(prevRaw);
+      let left = prevCollapsed;
+      while (left.endsWith('-')) left = left.slice(0, -1);
+      if ((left.length === 3 || left.length === 4) && isAllDigits(left)) {
+        const tag = `${left}-${last}`;
+        const without = tokens.slice(0, -2).join(' ').trim();
+        return { withoutTag: without, rabiesTagNumber: tag };
+      }
+    }
+  }
+
+  // Try single-token form: last token like 123-45 (or 123--45 collapsed)
+  {
+    const raw = tokens[tokens.length - 1];
+    const normalized = collapseHyphens(raw);
+    const hyphenAt = normalized.indexOf('-');
+    if (hyphenAt > 0) {
+      const left = normalized.slice(0, hyphenAt);
+      const right = normalized.slice(hyphenAt + 1);
+      if ((left.length === 3 || left.length === 4) && right.length === 2 && isAllDigits(left) && isAllDigits(right)) {
+        const tag = `${left}-${right}`;
+        const without = tokens.slice(0, -1).join(' ').trim();
+        return { withoutTag: without, rabiesTagNumber: tag };
+      }
+    }
+  }
+
+  // No tag found
+  return { withoutTag: tokens.join(' ').trim() };
+}
+
+function normalizeTagFromText(raw: string): string | undefined {
+  let s = toAsciiHyphen(raw.trim());
+  if (!s) return undefined;
+  s = collapseHyphens(s).replace(/\s*-\s*/g, '-');
+  const hyphenAt = s.indexOf('-');
+  if (hyphenAt > 0) {
+    const left = s.slice(0, hyphenAt);
+    const right = s.slice(hyphenAt + 1);
+    if ((left.length === 3 || left.length === 4) && right.length === 2 && isAllDigits(left) && isAllDigits(right)) {
+      return `${left}-${right}`;
+    }
+  }
+  return undefined;
 }
 
 function isNameToken(token: string): boolean {
@@ -342,10 +430,10 @@ export function parseVaccineRecords(pdfText: string): VaccineDeliveryRow[] {
     if (!clientInfo) continue; // cannot parse without client
     const { clientFamilyName, clientGivenName, beforeClient } = clientInfo;
 
-    const { withoutTag } = stripTrailingTagNumber(beforeClient);
+    const { withoutTag, rabiesTagNumber } = stripTrailingTagNumber(beforeClient);
 
     const { patientName, description } = extractPatientAndDescription(withoutTag);
-    if (!patientName || !clientFamilyName || !clientGivenName) continue;
+    if (!patientName || !clientFamilyName || !clientGivenName || !currentLot.expiryDate) continue;
 
     rows.push({
       dateGiven,
@@ -357,6 +445,7 @@ export function parseVaccineRecords(pdfText: string): VaccineDeliveryRow[] {
       lotNumber: currentLot.lotNumber,
       manufacturer: currentLot.manufacturer,
       expiryDate: currentLot.expiryDate,
+      rabiesTagNumber,
     });
   }
 
@@ -521,7 +610,8 @@ export function parseVaccineRecordsStructured(doc: Pdf2JsonDoc): VaccineDelivery
       const patientStr = columns.cols.patientNameX >= 0 ? getRangeText(columns.cols.patientNameX, xs.indexOf(columns.cols.patientNameX)) : '';
       const clientStr = columns.cols.clientNameX >= 0 ? getRangeText(columns.cols.clientNameX, xs.indexOf(columns.cols.clientNameX)) : '';
       const descStr = columns.cols.descriptionX >= 0 ? getRangeText(columns.cols.descriptionX, xs.indexOf(columns.cols.descriptionX)) : '';
-      // provider available but we ignore; tag is not needed
+      const tagStr = columns.cols.tagX >= 0 ? getRangeText(columns.cols.tagX, xs.indexOf(columns.cols.tagX)) : '';
+      // provider available but we ignore
 
       const dateGiven = normalizeMmDdYyyy(dateGivenStr) || '';
       const dateDue = normalizeMmDdYyyy(dateDueStr) || '';
@@ -540,19 +630,32 @@ export function parseVaccineRecordsStructured(doc: Pdf2JsonDoc): VaccineDelivery
         clientGivenName = parts.join(' ');
       }
 
+      let rabiesTagNumber = normalizeTagFromText(tagStr);
+      let descCandidate = descStr;
+      if (!rabiesTagNumber) {
+        const tagRes = stripTrailingTagNumber(descStr);
+        rabiesTagNumber = tagRes.rabiesTagNumber;
+        descCandidate = tagRes.withoutTag;
+      }
+      const descClean = stripTrailingProviderCode(descCandidate);
+
       const rowOut: VaccineDeliveryRow = {
         dateGiven,
         dateDue: dateDue || undefined,
         patientName: patientStr.trim(),
         clientGivenName,
         clientFamilyName,
-        description: descStr.trim(),
+        description: descClean.trim(),
         lotNumber: lotMeta.lotNumber,
         manufacturer: lotMeta.manufacturer,
         expiryDate: lotMeta.expiryDate,
+        rabiesTagNumber,
       };
 
-      if (rowOut.description.length > 0) rowsOut.push(rowOut);
+      if (
+        rowOut.description.length > 0 &&
+        rowOut.expiryDate
+      ) rowsOut.push(rowOut);
     }
   }
 

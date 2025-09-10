@@ -316,13 +316,15 @@ function pickDefined<T extends Record<string, unknown>>(obj: T): Record<string, 
 function immunizationMatches(
     draft: ImmunizationDraft,
     existing: Immunization,
-    env: { locationId: string; providerId: string }
+    env: { location: string; provider: string }
 ): boolean {
+    // Build expected with env keys matching server response, and omit patient field
+    const { patient: _omit, ...rest } = draft as unknown as Record<string, unknown>;
     const expected = pickDefined({
-        ...draft,
-        locationId: env.locationId,
-        providerId: env.providerId,
-    }) as Record<string, unknown>;
+        ...rest,
+        location: env.location,
+        provider: env.provider,
+    });
 
     return deepEqual(expected, existing as unknown as Record<string, unknown>);
 }
@@ -358,13 +360,13 @@ export async function processImmunizationProposals(
         const draft = proposals[i];
         const existingList = existingByPatient.get(draft.patient) ?? [];
 
-        const match = existingList.find((im) => immunizationMatches(draft, im, { locationId, providerId }));
+        const match = existingList.find((im) => immunizationMatches(draft, im, { location: locationId, provider: providerId }));
 
         if (match) {
             results.skipped.push({ input: draft, matchId: match.id });
         } else {
             try {
-                const finalInput = { ...draft, locationId, providerId };
+                const finalInput = { ...draft, location: locationId, provider: providerId } as unknown as ImmunizationDraft;
                 const res = await createImmunization(finalInput, options);
                 results.created.push({ input: draft, created: res.createImmunization });
             } catch (err) {

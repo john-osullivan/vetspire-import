@@ -7,7 +7,6 @@ import { extractTextFromPdf, extractPdf2Json } from '../clients/pdfClient.js';
 import { parseVaccineRecords, parseVaccineRecordsStructured, VaccineDeliveryRow, writeVaccineRowsToJSON } from '../services/pdfParser.js';
 import { buildPatientLookup, patientClientKey } from '../services/immunizationLookup.js';
 import { toImmunizationDraft } from '../services/transformer.js';
-import { fetchAllExistingRecords } from '../clients/apiClient.js';
 
 type Proposal = ReturnType<typeof toImmunizationDraft>;
 
@@ -63,14 +62,9 @@ async function main() {
 
   console.log(`Reading vaccine PDF: ${pdfPath}`);
   let rows: VaccineDeliveryRow[] = [];
-  if (preferStructured) {
-    const doc = await extractPdf2Json(pdfPath);
-    if (!doc) throw new Error('Failed to load pdf2json module for structured parsing');
-    rows = parseVaccineRecordsStructured(doc);
-  } else {
-    const text = await extractTextFromPdf(pdfPath);
-    rows = parseVaccineRecords(text);
-  }
+  const doc = await extractPdf2Json(pdfPath);
+  if (!doc) throw new Error('Failed to load pdf2json module for structured parsing');
+  rows = parseVaccineRecordsStructured(doc);
   console.log(`Parsed ${rows.length} vaccine delivery rows`);
 
   if (dumpRows) {
@@ -81,6 +75,7 @@ async function main() {
   let patientLookup = new Map<string, string>();
   if (doFetch) {
     console.log('Fetching existing patients for lookup...');
+    const { fetchAllExistingRecords } = await import('../clients/apiClient.js');
     const { patients } = await fetchAllExistingRecords(true);
     patientLookup = buildPatientLookup(patients as any);
     console.log(`Built lookup with ${patientLookup.size} keys`);
